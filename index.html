@@ -146,6 +146,9 @@ header h1{font-size:16px;font-weight:700;flex:1}
 .msi-progress{height:6px;border-radius:3px;background:#f0f2f8;margin:8px 0;overflow:hidden}
 .msi-bar{height:100%;border-radius:3px;background:linear-gradient(90deg,#2ecc71,#1abc9c);transition:.3s}
 </style>
+<style>
+.pay-reg-btn{display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#4a6cf7,#6366f1);color:#fff;border:none;padding:12px 20px;border-radius:12px;cursor:pointer;font-size:14px;font-weight:700;margin-bottom:14px;width:100%;box-shadow:0 2px 10px rgba(74,108,247,.35);letter-spacing:.3px}.pay-reg-btn:active{opacity:.85}
+</style>
 </head>
 <body>
 
@@ -171,6 +174,7 @@ header h1{font-size:16px;font-weight:700;flex:1}
     <button onclick="checkUpcoming(true)">Ver</button>
   </div>
   <div class="summary-grid" id="summaryGrid"></div>
+  <button class="pay-reg-btn" onclick="openPayModal()">💳 Registrar Pago</button>
   <div id="upcomingList"></div>
   
   <div style="margin-top:20px" class="section-title">📆 Pagos por día del mes</div>
@@ -1477,5 +1481,158 @@ _auth.onAuthStateChanged(function(user){
     </div>
   </div>
 </div>
+<div id="payModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)closePayModal()">
+  <div style="background:#fff;border-radius:18px;width:100%;max-width:500px;margin:auto;padding:20px 20px 16px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:16px;font-weight:700;color:#1a1a2e">💳 Registrar Pago</div>
+      <button onclick="closePayModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#aaa;line-height:1;padding:0">&#215;</button>
+    </div>
+    <div id="payModalContent"></div>
+  </div>
+</div>
+<script>
+function openPayModal(){
+  renderPayModal();
+  document.getElementById('payModal').style.display='flex';
+}
+function closePayModal(){
+  document.getElementById('payModal').style.display='none';
+}
+function renderPayModal(){
+  var el=document.getElementById('payModalContent');
+  if(!el) return;
+  var fmt=function(n){return parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var today=new Date();
+  var yr=today.getFullYear();
+  var mo=today.getMonth()+1;
+  var _loanItems=Object.entries(state.loans||{}).map(function(e){
+    return Object.assign({},e[1],{_id:e[0],_type:'loan',amount:parseFloat(e[1].monthly||0)});
+  });
+  var _cardItems=getCreditCardItems().map(function(i){
+    return Object.assign({},i,{_type:'cardpay',_id:'card-'+i.cardId});
+  });
+  var pending=[
+    ...Object.entries(state.subs||{}).map(function(e){return Object.assign({},e[1],{_id:e[0],_type:'sub'});}),
+    ...Object.entries(state.svcs||{}).map(function(e){return Object.assign({},e[1],{_id:e[0],_type:'svc'});}),
+    ..._loanItems,..._cardItems
+  ].filter(function(i){var d=daysUntil(i.nextDate);return d>=-7&&d<=45;})
+   .sort(function(a,b){return daysUntil(a.nextDate)-daysUntil(b.nextDate);});
+  window._payPendingItems=pending;
+  var h='';
+  h+='<div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📋 Seleccionar pagos</div>';
+  if(pending.length){
+    pending.forEach(function(item,idx){
+      var pk=yr+'-'+mo+'-'+item._id;
+      var paid=(state.paid||{})[pk];
+      var d=daysUntil(item.nextDate);
+      var dText=d<0?'Vencido '+(-d)+' días':d===0?'Hoy':d===1?'Mañana':'En '+d+' días';
+      var dColor=d<0?'#e05252':d<=3?'#e67e22':'#888';
+      var card=item.cardId?(state.cards||{})[item.cardId]:null;
+      var amt=parseFloat(item.amount||0);
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:'+(paid?'#f0fdf4':'#f8fafc')+';margin-bottom:6px;border:1px solid '+(paid?'#bbf7d0':'#e8eaf0')+'">';
+      h+='<input type="checkbox" data-pk="'+pk+'" data-idx="'+idx+'" '+(paid?'checked disabled':'')+' style="width:16px;height:16px;flex-shrink:0;cursor:'+(paid?'default':'pointer')+';accent-color:#4a6cf7">';
+      h+='<span style="font-size:15px">'+(item.emoji||'📦')+'</span>';
+      h+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.name+(paid?' <span style="color:#16a34a;font-size:11px">✓ Pagado</span>':'')+'</div>';
+      h+='<div style="font-size:10px;color:'+dColor+'">'+dText+(card?' · <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+card.color+';margin:0 2px;vertical-align:middle"></span>'+card.name:'')+'</div></div>';
+      if(paid){
+        h+='<span style="font-size:11px;color:#16a34a;font-weight:700;white-space:nowrap;flex-shrink:0">$'+fmt(amt)+'</span>';
+      } else {
+        h+='<input type="number" id="payamt-'+idx+'" value="'+amt.toFixed(2)+'" min="0" step="0.01" style="width:86px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;font-size:12px;text-align:right;flex-shrink:0">';
+      }
+      h+='</div>';
+    });
+  } else {
+    h+='<div style="font-size:12px;color:#aaa;text-align:center;padding:14px 0">No hay pagos en los próximos 45 días</div>';
+  }
+  // New item collapsible
+  h+='<details style="margin-top:12px"><summary style="font-size:11px;font-weight:700;color:#4a6cf7;cursor:pointer;padding:10px 0;border-top:2px dashed #e0e4f0;text-transform:uppercase;letter-spacing:.5px;list-style:none">➕ Agregar pago / ítem nuevo</summary>';
+  h+='<div style="padding-top:10px">';
+  h+='<input id="pmName" type="text" placeholder="Nombre del pago o ítem" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:8px;box-sizing:border-box">';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+  h+='<input id="pmAmt" type="number" placeholder="Monto" min="0" step="0.01" style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:12px">';
+  h+='<select id="pmType" style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:12px">';
+  h+='<option value="svc">Servicio</option><option value="sub">Suscripción</option>';
+  h+='<option value="loan">Préstamo / Crédito</option><option value="msi">MSI</option>';
+  h+='<option value="cash">Gasto único</option></select></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+  h+='<select id="pmCard" style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:12px">';
+  h+='<option value="">Efectivo / sin tarjeta</option>';
+  Object.entries(state.cards||{}).forEach(function(e){
+    if(e[1].type==='credit') h+='<option value="'+e[0]+'">'+e[1].name+'</option>';
+  });
+  h+='</select>';
+  h+='<select id="pmCycle" style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:12px">';
+  h+='<option value="monthly">Mensual</option><option value="bimestral">Bimestral</option>';
+  h+='<option value="annual">Anual</option><option value="weekly">Semanal</option></select></div>';
+  h+='<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#555;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="pmRecurr" style="width:15px;height:15px;accent-color:#4a6cf7"> Guardar como recurrente (aparece en suscripciones / servicios)</label>';
+  h+='</div></details>';
+  // Buttons
+  h+='<div style="display:flex;gap:8px;margin-top:14px">';
+  h+='<button onclick="closePayModal()" style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:13px;cursor:pointer;font-weight:600">Cancelar</button>';
+  h+='<button onclick="submitPayModal()" style="flex:2;padding:10px;border:none;border-radius:8px;background:linear-gradient(135deg,#4a6cf7,#6366f1);color:#fff;font-size:13px;font-weight:700;cursor:pointer">💳 Registrar pagos</button>';
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+function submitPayModal(){
+  if(!state.paid) state.paid={};
+  var today=new Date();
+  var yr=today.getFullYear();
+  var mo=today.getMonth()+1;
+  var pending=window._payPendingItems||[];
+  // Process checked pending items
+  document.querySelectorAll('#payModalContent input[type=checkbox][data-pk]').forEach(function(cb){
+    if(!cb.checked||cb.disabled) return;
+    var pk=cb.dataset.pk;
+    if((state.paid||{})[pk]) return;
+    var idx=parseInt(cb.dataset.idx);
+    var amtEl=document.getElementById('payamt-'+idx);
+    var item=pending[idx];
+    state.paid[pk]=true;
+    if(item&&amtEl){
+      var entered=parseFloat(amtEl.value||0);
+      if(item._type==='cardpay'){
+        var c=(state.cards||{})[item.cardId];
+        if(c&&c.type==='credit'&&entered>0) c.balance=Math.max(0,parseFloat(c.balance||0)-entered);
+      } else if(item.cardId){
+        var c=(state.cards||{})[item.cardId];
+        if(c&&c.type==='credit'&&entered>0) c.balance=Math.max(0,parseFloat(c.balance||0)+entered);
+      }
+    } else {
+      updateCardBalance(pk,+1);
+    }
+  });
+  // New item
+  var name=((document.getElementById('pmName')||{}).value||'').trim();
+  var amt=parseFloat((document.getElementById('pmAmt')||{}).value||0);
+  var type=((document.getElementById('pmType')||{}).value)||'svc';
+  var cardId=((document.getElementById('pmCard')||{}).value)||'';
+  var cycle=((document.getElementById('pmCycle')||{}).value)||'monthly';
+  var recurr=!!((document.getElementById('pmRecurr')||{}).checked);
+  if(name&&amt>0){
+    var newKey='pay-'+Date.now();
+    var dateStr=today.toISOString().split('T')[0];
+    if(recurr&&type==='loan'){
+      if(!state.loans) state.loans={};
+      state.loans[newKey]={name:name,monthly:amt,currency:'MXN',cardId:cardId,nextDate:dateStr,lender:'Manual',total:0,remaining:0,emoji:'🏦'};
+      state.paid[yr+'-'+mo+'-'+newKey]=true;
+    } else if(recurr&&(type==='sub'||type==='svc')){
+      var newItem={name:name,amount:amt,currency:'MXN',cycle:cycle,cardId:cardId,nextDate:dateStr,emoji:'💰'};
+      if(!state.subs) state.subs={};
+      if(!state.svcs) state.svcs={};
+      if(type==='sub') state.subs[newKey]=newItem; else state.svcs[newKey]=newItem;
+      state.paid[yr+'-'+mo+'-'+newKey]=true;
+    }
+    // Always update card balance for new item if a credit card is assigned
+    if(cardId&&type!=='cardpay'){
+      var c=(state.cards||{})[cardId];
+      if(c&&c.type==='credit') c.balance=Math.max(0,parseFloat(c.balance||0)+amt);
+    }
+  }
+  save();
+  closePayModal();
+  renderAll();
+}
+</script>
 </body>
 </html>
