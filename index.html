@@ -115,7 +115,6 @@ header h1{font-size:16px;font-weight:700;flex:1}
 .rec-box.rec-warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
 .rec-box.rec-danger{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 
-/* Import */
 .drop-zone{border:2px dashed #c0c8f0;border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;background:#f8f9ff;transition:.2s;margin-bottom:16px}
 .drop-zone:hover,.drop-zone.drag-over{border-color:#4a6cf7;background:#eef1ff}
 .drop-zone-icon{font-size:36px;margin-bottom:8px}
@@ -128,11 +127,8 @@ header h1{font-size:16px;font-weight:700;flex:1}
 .tx-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px}
 .tx-table th{background:#f8f9fc;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;border-bottom:2px solid #e8eaf0}
 .tx-table td{padding:7px 10px;border-bottom:1px solid #f0f2f8;vertical-align:middle}
-.tx-table tr:hover td{background:#f8f9ff}
-.tx-check{width:16px;height:16px;cursor:pointer}
 .tx-amount-neg{color:#e05252;font-weight:600}
-.tx-amount-pos{color:#27ae60;font-weight:600}
-.import-actions{display:flex;gap:8px;margin-bottom:20px}
+.import-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .import-section-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -167,6 +163,8 @@ header h1{font-size:16px;font-weight:700;flex:1}
   <div class="day-timeline" id="dayTimeline"></div>
   <div class="section-title">💳 Salud de tarjetas</div>
   <div id="cardHealth"></div>
+  <div style="margin-top:20px" class="section-title">🧠 Recomendaciones inteligentes</div>
+  <div id="smartRecs"></div>
 <div class="section-title">📅 Calendario</div>
   <div class="cal-header">
     <button class="cal-nav" onclick="changeMonth(-1)">‹</button>
@@ -309,7 +307,6 @@ function showTab(id,el){
   if(id==='subs') renderSubs();
   if(id==='servicios') renderSvcs();
   if(id==='prestamos') renderLoans();
-  // importar tab needs no render
 }
 
 // ── Persist ──
@@ -366,6 +363,7 @@ function renderDashboard(){
   renderByCard();
   renderDayTimeline();
   renderCardHealth();
+  renderSmartRecs();
 }
 
 function sumCard(label,value,sub){
@@ -609,6 +607,7 @@ updateNotifBtn();
 setTimeout(()=>checkUpcoming(Notification.permission==='granted'),1000);
 </script>
 
+<script>
 
 // ── Loans ──
 let editingLoan = null;
@@ -743,6 +742,194 @@ function renderCardHealth(){
   document.getElementById('cardHealth').innerHTML=h;
 }
 
+</script>
+<script>
+
+// ── Smart card recommendation ──
+function daysUntilPaymentIfCharged(card){
+  if(!card || card.type !== 'credit') return -1;
+  var today = new Date();
+  var todayDay = today.getDate();
+  var closingDay = parseInt(card.closingDay||1);
+  var dueDay = parseInt(card.dueDay||1);
+  var monthsAhead = todayDay <= closingDay ? 1 : 2;
+  var payDate = new Date(today.getFullYear(), today.getMonth() + monthsAhead, dueDay);
+  return Math.round((payDate - today) / (1000*60*60*24));
+}
+function bestCardRecommendation(){
+  var creditCards = Object.entries(state.cards||{}).filter(function(e){ return e[1].type==='credit'; });
+  var scored = creditCards.map(function(e){
+    return { cardId:e[0], card:e[1], days: daysUntilPaymentIfCharged(e[1]) };
+  });
+  scored.sort(function(a,b){ return b.days - a.days; });
+  return scored;
+}
+function renderSmartRecs(){
+  var el = document.getElementById('smartRecs');
+  if(!el) return;
+  var recs = bestCardRecommendation();
+  if(!recs.length){ el.innerHTML='<div class="empty">Agrega tarjetas de cr\u00e9dito para ver recomendaciones</div>'; return; }
+  var allItems = [...Object.values(state.subs||{}), ...Object.values(state.svcs||{}), ...Object.values(state.loans||{})];
+  var upcoming = allItems.filter(function(i){ var d=daysUntil(i.nextDate); return d>=0 && d<=30; })
+                         .sort(function(a,b){ return daysUntil(a.nextDate)-daysUntil(b.nextDate); });
+  var best = recs[0];
+  var h = '';
+  if(recs.length > 0){
+    h += '<div style="background:linear-gradient(135deg,#e8f4fd,#f0f8ff);border:1px solid #bee3f8;border-radius:12px;padding:14px;margin-bottom:14px">';
+    h += '<div style="font-size:11px;color:#2b6cb0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">\u{1F3C6} Mejor tarjeta ahora mismo</div>';
+    h += '<div style="display:flex;align-items:center;gap:10px">';
+    h += '<div class="card-color" style="background:'+best.card.color+';width:40px;height:26px;border-radius:6px"></div>';
+    h += '<div><div style="font-size:14px;font-weight:700">'+best.card.name+'</div>';
+    h += '<div style="font-size:11px;color:#555">Tienes <strong>'+best.days+' d\u00edas</strong> para pagar sin intereses</div></div></div>';
+    if(recs.length > 1){
+      h += '<div style="margin-top:10px;border-top:1px solid #bee3f8;padding-top:10px;font-size:11px;color:#666">';
+      recs.slice(1).forEach(function(r){
+        h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
+        h += '<div style="width:10px;height:10px;border-radius:50%;background:'+r.card.color+'"></div>';
+        h += '<span>'+r.card.name+'</span><span style="margin-left:auto;color:#888">'+r.days+' d\u00edas</span></div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+  if(upcoming.length){
+    h += '<div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">\u{1F4CB} Qu\u00e9 tarjeta usar para cada pago</div>';
+    upcoming.forEach(function(item){
+      var d = daysUntil(item.nextDate);
+      var dText = d===0?'Hoy':d===1?'Ma\u00f1ana':'En '+d+' d\u00edas';
+      var best_for_item = recs[0];
+      h += '<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:flex-start;gap:10px">';
+      h += '<div style="font-size:18px">'+(item.emoji||'\u{1F4E6}')+'</div>';
+      h += '<div style="flex:1">';
+      h += '<div style="font-size:12px;font-weight:600">'+item.name+' <span style="color:#888;font-weight:400">\u00b7 '+dText+'</span></div>';
+      h += '<div style="font-size:11px;color:#888;margin-top:2px">'+fmtMoney(item.amount||item.monthly,item.currency)+'</div>';
+      if(best_for_item && best_for_item.days >= d){
+        h += '<div style="margin-top:6px;font-size:11px;padding:4px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;background:#f0fdf4;color:#166534">';
+        h += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+best_for_item.card.color+'"></span>';
+        h += '\u{1F4A1} Usar <strong>'+best_for_item.card.name+'</strong> \u2014 '+best_for_item.days+'d para pagar</div>';
+      } else {
+        h += '<div style="margin-top:6px;font-size:11px;padding:4px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;background:#fff7ed;color:#9a3412">\u26a0\ufe0f Sin tarjeta de cr\u00e9dito \u00f3ptima</div>';
+      }
+      h += '</div></div>';
+    });
+  }
+  el.innerHTML = h;
+}
+
+
+// ── PDF Import ──
+(function(){
+  if(typeof pdfjsLib !== 'undefined'){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  var dropZone = document.getElementById('dropZone');
+  var pdfInput = document.getElementById('pdfInput');
+  if(dropZone){
+    dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', function(){ dropZone.classList.remove('drag-over'); });
+    dropZone.addEventListener('drop', function(e){
+      e.preventDefault(); dropZone.classList.remove('drag-over');
+      var file = e.dataTransfer.files[0];
+      if(file && file.type==='application/pdf') processPDF(file);
+      else alert('Por favor sube un archivo PDF');
+    });
+  }
+  if(pdfInput){ pdfInput.addEventListener('change', function(){ if(this.files[0]) processPDF(this.files[0]); }); }
+
+  function setProgress(pct, msg){
+    var bar=document.getElementById('importBar'), prog=document.getElementById('importProgress'), status=document.getElementById('importStatus');
+    if(prog) prog.style.display=pct>0?'block':'none';
+    if(bar) bar.style.width=pct+'%';
+    if(status) status.textContent=msg||'';
+  }
+  function processPDF(file){
+    setProgress(10,'Leyendo PDF...');
+    document.getElementById('importResults').innerHTML='';
+    var reader=new FileReader();
+    reader.onload=function(e){
+      setProgress(30,'Extrayendo texto...');
+      if(typeof pdfjsLib==='undefined'){ alert('pdf.js no cargo. Verifica tu conexion.'); return; }
+      pdfjsLib.getDocument({data:e.target.result}).promise.then(function(pdf){
+        setProgress(50,'Procesando '+pdf.numPages+' pagina(s)...');
+        var ps=[];
+        for(var i=1;i<=pdf.numPages;i++){
+          ps.push(pdf.getPage(i).then(function(page){
+            return page.getTextContent().then(function(tc){ return tc.items.map(function(item){return item.str;}).join(' '); });
+          }));
+        }
+        return Promise.all(ps);
+      }).then(function(pages){
+        setProgress(80,'Analizando movimientos...');
+        var txs=parseTransactions(pages.join('\n'));
+        setProgress(100,txs.length+' movimientos encontrados');
+        renderImportResults(txs,file.name);
+      }).catch(function(err){
+        setProgress(0,'');
+        document.getElementById('importStatus').textContent='Error al leer el PDF. Esta protegido con contrasena?';
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  function parseTransactions(text){
+    var txs=[],lines=text.split(/[\n\r]+/);
+    var dateRe=/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{1,2}\s+(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\.?\s+\d{2,4})/i;
+    var amountRe=/([\-\+]?\$?\s*[\d,]+\.\d{2})/g;
+    for(var i=0;i<lines.length;i++){
+      var line=lines[i].trim();
+      if(line.length<8) continue;
+      var dm=line.match(dateRe); if(!dm) continue;
+      var amounts=[],m,rc=new RegExp(amountRe.source,'g');
+      while((m=rc.exec(line))!==null){ var n=parseFloat(m[1].replace(/[\$,\s]/g,'')); if(!isNaN(n)&&Math.abs(n)>0.01) amounts.push(n); }
+      if(!amounts.length) continue;
+      var desc=line.replace(dateRe,'').replace(new RegExp(amountRe.source,'g'),'').replace(/[\*\|#_]+/g,' ').replace(/\s+/g,' ').trim();
+      if(desc.length<2) desc='Movimiento';
+      var amount=amounts[amounts.length-1];
+      txs.push({date:dm[1],desc:desc.substring(0,60),amount:Math.abs(amount),isCharge:amount<0||(amounts.length>=2)});
+    }
+    var seen={};
+    return txs.filter(function(t){ var k=t.date+'|'+t.amount; if(seen[k]) return false; seen[k]=true; return true; }).slice(0,200);
+  }
+  function renderImportResults(txs,filename){
+    var el=document.getElementById('importResults');
+    if(!txs.length){ el.innerHTML='<div style="background:#fff3cd;border-radius:10px;padding:14px;font-size:13px">No se encontraron movimientos. Puede ser un PDF escaneado.</div>'; return; }
+    var charges=txs.filter(function(t){return t.isCharge;}),credits=txs.filter(function(t){return !t.isCharge;});
+    var h='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:12px">';
+    h+='Archivo: <strong>'+filename+'</strong> &middot; '+txs.length+' movimientos &middot; '+charges.length+' cargos &middot; '+credits.length+' abonos</div>';
+    h+='<div class="import-section-title">Selecciona los cargos recurrentes para importar</div>';
+    h+='<div class="import-actions"><button onclick="selectAllTx(true)" style="background:#f0f2f8;border:none;padding:6px 12px;border-radius:7px;font-size:11px;cursor:pointer">Seleccionar todos</button> ';
+    h+='<button onclick="selectAllTx(false)" style="background:#f0f2f8;border:none;padding:6px 12px;border-radius:7px;font-size:11px;cursor:pointer">Deseleccionar</button> ';
+    h+='<button onclick="importSelected()" style="background:#1a1a2e;color:#fff;border:none;padding:6px 14px;border-radius:7px;font-size:11px;cursor:pointer;font-weight:600">Importar seleccionados</button></div>';
+    h+='<table class="tx-table"><thead><tr><th></th><th>Fecha</th><th>Descripcion</th><th>Monto</th></tr></thead><tbody>';
+    charges.forEach(function(t,i){
+      h+='<tr><td><input type="checkbox" class="tx-check" data-desc="'+encodeURIComponent(t.desc)+'" data-amount="'+t.amount+'"></td>';
+      h+='<td style="color:#888;white-space:nowrap">'+t.date+'</td><td>'+t.desc+'</td>';
+      h+='<td class="tx-amount-neg">$'+t.amount.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    el.innerHTML=h;
+    window._importedTxs=charges;
+  }
+  window.selectAllTx=function(val){ document.querySelectorAll('.tx-check').forEach(function(cb){cb.checked=val;}); };
+  window.importSelected=function(){
+    var checked=document.querySelectorAll('.tx-check:checked');
+    if(!checked.length){ alert('Selecciona al menos un movimiento'); return; }
+    if(!state.subs) state.subs={};
+    var added=0;
+    checked.forEach(function(cb){
+      var id=uid();
+      state.subs[id]={emoji:'\u{1F4C4}',name:decodeURIComponent(cb.dataset.desc).substring(0,40),amount:parseFloat(cb.dataset.amount),currency:'MXN',cycle:'monthly',nextDate:new Date().toISOString().split('T')[0],cardId:''};
+      added++;
+    });
+    save();
+    alert(added+' movimientos importados. Revisalos en Suscripciones para ajustar detalles.');
+    document.getElementById('importResults').innerHTML='';
+    document.getElementById('importProgress').style.display='none';
+    document.getElementById('importStatus').textContent='';
+    document.getElementById('pdfInput').value='';
+  };
+})();
+
+</script>
 <script>
 // ── Firebase Sync ──
 const _fbCfg = {
@@ -831,12 +1018,9 @@ _auth.onAuthStateChanged(function(user){
     <div class="drop-zone-text">Arrastra tu estado de cuenta PDF aquí</div>
     <div class="drop-zone-sub">o haz clic para seleccionar</div>
     <div class="bank-badges">
-      <span class="bank-badge">BBVA</span>
-      <span class="bank-badge">Citibanamex</span>
-      <span class="bank-badge">Santander</span>
-      <span class="bank-badge">Banorte</span>
-      <span class="bank-badge">HSBC</span>
-      <span class="bank-badge">Inbursa</span>
+      <span class="bank-badge">BBVA</span><span class="bank-badge">Citibanamex</span>
+      <span class="bank-badge">Santander</span><span class="bank-badge">Banorte</span>
+      <span class="bank-badge">HSBC</span><span class="bank-badge">Inbursa</span>
     </div>
   </div>
   <input type="file" id="pdfInput" accept=".pdf" style="display:none">
