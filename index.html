@@ -871,7 +871,7 @@ function renderSmartRecs(){
     m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
     if(m){var y=parseInt(m[3]);if(y<100)y+=2000;return y+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}
     // DD-mon-YYYY (BBVA: 24-jun-2026)
-    m=s.match(/^(\d{1,2})-(\w{3})-( \d{2,4})$/i);
+    m=s.match(/^(\d{1,2})-(\w{3})-(\d{2,4})$/i);
     if(!m) m=s.match(/^(\d{1,2})-(\w{3})-(\d{2,4})$/i);
     if(m){var mo=MO[m[2].toLowerCase().substring(0,3)];if(mo!==undefined){var y=parseInt(m[3]);if(y<100)y+=2000;return y+'-'+String(mo+1).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}}
     // DD MMM YYYY (space separated)
@@ -940,7 +940,7 @@ function renderSmartRecs(){
         setTimeout(function(){setProgress(0);},600);
         renderImportResults(txs,file.name);
       }).catch(function(err){
-        setProgress(0);setStatus('Error al leer el PDF. Esta protegido con contrasena?','#c0392b');
+        setProgress(0);setStatus('Error: '+(err&&(err.message||err.name||JSON.stringify(err))),'#c0392b');
         console.error(err);
       });
     };
