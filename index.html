@@ -130,6 +130,21 @@ header h1{font-size:16px;font-weight:700;flex:1}
 .tx-amount-neg{color:#e05252;font-weight:600}
 .import-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .import-section-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px}
+
+.pay-section{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.pay-table{width:100%;border-collapse:collapse;font-size:12px}
+.pay-table th{background:#f8f9fc;padding:7px 10px;text-align:right;font-size:9px;text-transform:uppercase;color:#888;border-bottom:2px solid #e8eaf0}
+.pay-table th:first-child{text-align:left}
+.pay-table td{padding:7px 10px;border-bottom:1px solid #f0f2f8;text-align:right}
+.pay-table td:first-child{text-align:left}
+.pay-table tfoot td{font-weight:700;border-top:2px solid #e8eaf0;background:#f8f9fc}
+.pay-no-int{color:#166534;font-weight:600}
+.pay-min-msi{color:#1a6faf;font-weight:600}
+.pay-min{color:#777}
+.pay-nil{color:#ccc;font-size:10px}
+.msi-item{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.msi-progress{height:6px;border-radius:3px;background:#f0f2f8;margin:8px 0;overflow:hidden}
+.msi-bar{height:100%;border-radius:3px;background:linear-gradient(90deg,#2ecc71,#1abc9c);transition:.3s}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -148,6 +163,7 @@ header h1{font-size:16px;font-weight:700;flex:1}
   <div class="nav-tab" onclick="showTab('servicios',this)">🏠 Servicios</div>
   <div class="nav-tab" onclick="showTab('prestamos',this)">🤝 Préstamos</div>
   <div class="nav-tab" onclick="showTab('importar',this)">📄 Importar</div>
+  <div class="nav-tab" onclick="showTab('msi',this)">📋 MSI</div>
 </div>
 
 <!-- DASHBOARD -->
@@ -165,7 +181,9 @@ header h1{font-size:16px;font-weight:700;flex:1}
   <div id="cardHealth"></div>
   <div style="margin-top:20px" class="section-title">🧠 Recomendaciones inteligentes</div>
   <div id="smartRecs"></div>
-<div class="section-title">📅 Calendario</div>
+<div class="section-title">💳 Pagos este corte</div>
+  <div id="paymentSummary"></div>
+  <div style="margin-top:20px" class="section-title">📅 Calendario</div>
   <div class="cal-header">
     <button class="cal-nav" onclick="changeMonth(-1)">‹</button>
     <div class="cal-title" id="calTitle"></div>
@@ -200,12 +218,13 @@ header h1{font-size:16px;font-weight:700;flex:1}
     <h2 id="cardModalTitle">Nueva Tarjeta</h2>
     <div class="form-group"><label>Nombre</label><input id="cName" placeholder="Ej: Banamex Oro"></div>
     <div class="form-group"><label>Tipo</label>
-      <select id="cType"><option value="credit">Crédito</option><option value="debit">Débito</option><option value="cash">Efectivo</option></select>
+      <select id="cType" onchange="var g=document.getElementById('cPayGroup');if(g)g.style.display=this.value==='credit'?'block':'none'"><option value="credit">Crédito</option><option value="debit">Débito</option><option value="cash">Efectivo</option></select>
     </div>
     <div class="form-group" id="cLimitGroup"><label>Límite de crédito</label><input id="cLimit" type="number" placeholder="0"></div>
     <div class="form-group"><label>Saldo actual</label><input id="cBalance" type="number" placeholder="0"></div>
     <div class="form-group" id="cClosingGroup"><label>Día de corte</label><input id="cClosing" type="number" min="1" max="31" placeholder="15"></div>
     <div class="form-group"><label>Día de pago</label><input id="cDue" type="number" min="1" max="31" placeholder="5"></div>
+    <div class="form-group" id="cPayGroup"><label style="font-size:12px;color:#1a6faf;font-weight:700">💳 Último estado de cuenta</label><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px"><div><label style="font-size:10px;color:#888">Sin intereses</label><input id="cNoInt" type="number" step="0.01" placeholder="0.00" style="width:100%;padding:7px;border:1.5px solid #e0e4f0;border-radius:7px;font-size:12px;margin-top:2px;box-sizing:border-box"></div><div><label style="font-size:10px;color:#888">Mín + MSI</label><input id="cMinMsi" type="number" step="0.01" placeholder="0.00" style="width:100%;padding:7px;border:1.5px solid #e0e4f0;border-radius:7px;font-size:12px;margin-top:2px;box-sizing:border-box"></div><div><label style="font-size:10px;color:#888">Mínimo</label><input id="cMin" type="number" step="0.01" placeholder="0.00" style="width:100%;padding:7px;border:1.5px solid #e0e4f0;border-radius:7px;font-size:12px;margin-top:2px;box-sizing:border-box"></div></div></div>
     <div class="form-group"><label>Color</label>
       <div class="color-picker" id="colorPicker"></div>
     </div>
@@ -307,6 +326,7 @@ function showTab(id,el){
   if(id==='subs') renderSubs();
   if(id==='servicios') renderSvcs();
   if(id==='prestamos') renderLoans();
+  if(id==='msi') renderMsi();
 }
 
 // ── Persist ──
@@ -328,6 +348,7 @@ function renderAll(){
   renderSubs();
   renderSvcs();
   renderLoans();
+  renderMsi();
 }
 
 function renderDashboard(){
@@ -364,6 +385,7 @@ function renderDashboard(){
   renderDayTimeline();
   renderCardHealth();
   renderSmartRecs();
+  renderPaymentSummary();
 }
 
 function sumCard(label,value,sub){
@@ -492,6 +514,10 @@ function openCardModal(id){
   document.getElementById('cBalance').value=c.balance||'';
   document.getElementById('cClosing').value=c.closingDay||'';
   document.getElementById('cDue').value=c.dueDay||'';
+  var _pg=document.getElementById('cPayGroup');if(_pg)_pg.style.display=(c.type||'credit')==='credit'?'block':'none';
+  if(document.getElementById('cNoInt')) document.getElementById('cNoInt').value=c.noInterest||'';
+  if(document.getElementById('cMinMsi')) document.getElementById('cMinMsi').value=c.minMsi||'';
+  if(document.getElementById('cMin')) document.getElementById('cMin').value=c.minimum||'';
   document.getElementById('cDelBtn').style.display=id?'block':'none';
   initColorPicker();
   document.getElementById('cardModal').classList.add('open');
@@ -500,7 +526,11 @@ function saveCard(){
   const name=document.getElementById('cName').value.trim();
   if(!name) return alert('Ingresa un nombre');
   const id=editingCard||uid();
-  state.cards[id]={name, type:document.getElementById('cType').value, limit:document.getElementById('cLimit').value, balance:document.getElementById('cBalance').value, closingDay:document.getElementById('cClosing').value, dueDay:document.getElementById('cDue').value, color:selectedColor};
+  var _ctype=document.getElementById('cType').value;
+  var _ni=_ctype==='credit'?(parseFloat(document.getElementById('cNoInt').value)||null):null;
+  var _mm=_ctype==='credit'?(parseFloat(document.getElementById('cMinMsi').value)||null):null;
+  var _mn=_ctype==='credit'?(parseFloat(document.getElementById('cMin').value)||null):null;
+  state.cards[id]={name:name,type:_ctype,limit:document.getElementById('cLimit').value,balance:document.getElementById('cBalance').value,closingDay:document.getElementById('cClosing').value,dueDay:document.getElementById('cDue').value,color:selectedColor,noInterest:_ni,minMsi:_mm,minimum:_mn};
   closeModals(); save();
 }
 function deleteCard(){
@@ -1093,6 +1123,107 @@ function renderSmartRecs(){
 
 </script>
 <script>
+// -- MSI --
+var editingMsi=null;
+function openMsiModal(id){
+  editingMsi=id||null;
+  if(!state.msi) state.msi={};
+  var m=id?state.msi[id]:{};
+  document.getElementById('msiModalTitle').textContent=id?'Editar MSI':'Nueva compra MSI';
+  document.getElementById('mName').value=m.name||'';
+  document.getElementById('mStore').value=m.store||'';
+  document.getElementById('mTotal').value=m.total||'';
+  document.getElementById('mMonths').value=m.months||'';
+  document.getElementById('mMonthly').value=m.monthly||'';
+  document.getElementById('mPaid').value=m.paid||0;
+  document.getElementById('mCard').innerHTML=cardOptions(m.cardId);
+  document.getElementById('mStart').value=m.startDate||new Date().toISOString().split('T')[0];
+  document.getElementById('mDelBtn').style.display=id?'block':'none';
+  document.getElementById('msiModal').classList.add('open');
+}
+function saveMsi(){
+  var name=document.getElementById('mName').value.trim();
+  if(!name) return alert('Ingresa una descripción');
+  if(!state.msi) state.msi={};
+  var id=editingMsi||uid();
+  var total=parseFloat(document.getElementById('mTotal').value)||0;
+  var months=parseInt(document.getElementById('mMonths').value)||1;
+  var monthly=parseFloat(document.getElementById('mMonthly').value)||(months?total/months:0);
+  state.msi[id]={name:name,store:document.getElementById('mStore').value,total:total,months:months,monthly:monthly,paid:parseInt(document.getElementById('mPaid').value)||0,cardId:document.getElementById('mCard').value,startDate:document.getElementById('mStart').value};
+  closeModals();save();
+}
+function deleteMsi(){
+  if(!editingMsi||!confirm('¿Eliminar MSI?')) return;
+  delete state.msi[editingMsi];
+  closeModals();save();
+}
+function renderMsi(){
+  if(!state.msi) state.msi={};
+  var items=Object.entries(state.msi);
+  var listEl=document.getElementById('msiList');
+  var sumEl=document.getElementById('msiSummary');
+  if(!items.length){if(listEl) listEl.innerHTML='<div class="empty">No hay compras a meses sin interés registradas.</div>';if(sumEl) sumEl.innerHTML='';return;}
+  var totalMonthly=0,totalRemaining=0;
+  items.forEach(function(e){var m=e[1];var rem=(m.months||0)-(m.paid||0);totalMonthly+=parseFloat(m.monthly||0);totalRemaining+=rem*parseFloat(m.monthly||0);});
+  var fmt=function(n){return '$'+parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  if(sumEl){
+    var sh='<div class="pay-section" style="display:flex;gap:16px;flex-wrap:wrap">';
+    sh+='<div style="flex:1;min-width:100px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Pago mensual total</div><div style="font-size:18px;font-weight:800;color:#1a6faf">'+fmt(totalMonthly)+'</div></div>';
+    sh+='<div style="flex:1;min-width:100px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Por liquidar</div><div style="font-size:18px;font-weight:800;color:#e67e22">'+fmt(totalRemaining)+'</div></div>';
+    sh+='<div style="flex:1;min-width:100px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Compras activas</div><div style="font-size:18px;font-weight:800;color:#1a1a2e">'+items.length+'</div></div>';
+    sh+='</div>';
+    sumEl.innerHTML=sh;
+  }
+  var h='';
+  items.forEach(function(e){
+    var id=e[0],m=e[1];
+    var remaining=(m.months||0)-(m.paid||0);
+    var remainingAmt=remaining*(m.monthly||0);
+    var pct=m.months>0?Math.round(((m.paid||0)/m.months)*100):0;
+    var card=state.cards[m.cardId];
+    h+='<div class="msi-item">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+    h+='<div><div style="font-size:13px;font-weight:700">'+m.name+'</div>';
+    h+='<div style="font-size:11px;color:#888;margin-top:2px">'+(m.store||'')+(card?' · <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin:0 3px;vertical-align:middle"></span>'+card.name:'')+'</div></div>';
+    h+='<div style="text-align:right"><div style="font-size:13px;font-weight:700;color:#1a6faf">'+fmt(m.monthly)+'/mes</div>';
+    h+='<div style="font-size:10px;color:#888">'+(m.paid||0)+'/'+m.months+' pagos ('+pct+'%)</div></div></div>';
+    h+='<div class="msi-progress"><div class="msi-bar" style="width:'+pct+'%"></div></div>';
+    h+='<div style="display:flex;justify-content:space-between;font-size:11px;color:#888">';
+    h+='<span>Por pagar: '+fmt(remainingAmt)+' ('+remaining+' meses)</span>';
+    h+='<span>Total: '+fmt(m.total||0)+'</span></div>';
+    h+='<div style="text-align:right;margin-top:8px"><button class="btn-icon" style="font-size:12px;border:1px solid #eee;padding:3px 8px;border-radius:6px" onclick="openMsiModal(this.dataset.id)" data-id="'+id+'">&#9999; Editar</button></div>';
+    h+='</div>';
+  });
+  if(listEl) listEl.innerHTML=h;
+}
+
+// -- Payment Summary --
+function renderPaymentSummary(){
+  var cards=Object.entries(state.cards||{}).filter(function(e){return e[1].type==='credit';});
+  var el=document.getElementById('paymentSummary');
+  if(!el) return;
+  if(!cards.length){el.innerHTML='<div class="pay-section" style="font-size:12px;color:#bbb;text-align:center;padding:20px">Agrega tarjetas de crédito para ver resumen de pagos</div>';return;}
+  var hasAny=cards.some(function(e){return e[1].noInterest||e[1].minMsi||e[1].minimum;});
+  if(!hasAny){el.innerHTML='<div class="pay-section" style="font-size:12px;color:#888;text-align:center;padding:16px">ℹ️ Edita tus tarjetas de crédito para ingresar los montos del estado de cuenta</div>';return;}
+  var fmt=function(n){return n?'$'+parseFloat(n).toLocaleString('es-MX',{minimumFractionDigits:2}):'<span class="pay-nil">—</span>';};
+  var totNI=0,totMM=0,totMn=0;
+  var h='<div class="pay-section"><table class="pay-table"><thead><tr><th>Tarjeta</th><th>Sin intereses</th><th>Mín+MSI</th><th>Mínimo</th></tr></thead><tbody>';
+  cards.forEach(function(e){
+    var id=e[0],c=e[1];
+    var ni=parseFloat(c.noInterest||0),mm=parseFloat(c.minMsi||0),mn=parseFloat(c.minimum||0);
+    totNI+=ni;totMM+=mm;totMn+=mn;
+    h+='<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+c.color+';margin-right:5px;vertical-align:middle"></span>'+c.name+'</td>';
+    h+='<td class="pay-no-int">'+fmt(ni)+'</td>';
+    h+='<td class="pay-min-msi">'+fmt(mm)+'</td>';
+    h+='<td class="pay-min">'+fmt(mn)+'</td></tr>';
+  });
+  var fmt2=function(n){return n?'$'+n.toLocaleString('es-MX',{minimumFractionDigits:2}):'—';};
+  h+='</tbody><tfoot><tr><td>Total</td><td class="pay-no-int">'+fmt2(totNI)+'</td><td class="pay-min-msi">'+fmt2(totMM)+'</td><td class="pay-min">'+fmt2(totMn)+'</td></tr></tfoot></table></div>';
+  el.innerHTML=h;
+}
+
+</script>
+<script>
 // ── Firebase Sync ──
 const _fbCfg = {
   apiKey: "AIzaSyBAMgHvDHN3ZKxNYKlJuDM9KKPy3kS_kAo",
@@ -1169,6 +1300,35 @@ _auth.onAuthStateChanged(function(user){
       <button class="btn-cancel" onclick="closeModals()">Cancelar</button>
       <button class="btn-delete" id="lDelBtn" style="display:none" onclick="deleteLoan()">Eliminar</button>
       <button class="btn-save" onclick="saveLoan()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MSI (Meses Sin Interes) -->
+<div class="section" id="sec-msi">
+  <button class="add-btn" onclick="openMsiModal()">+ Agregar compra MSI</button>
+  <div id="msiSummary" style="margin-bottom:14px"></div>
+  <div id="msiList"></div>
+</div>
+
+<!-- MODAL MSI -->
+<div class="modal-bg" id="msiModal">
+  <div class="modal">
+    <h2 id="msiModalTitle">Nueva compra MSI</h2>
+    <div class="form-group"><label>Descripcion</label><input id="mName" placeholder="Ej: TV Samsung 55 pulgadas"></div>
+    <div class="form-group"><label>Tienda / Comercio</label><input id="mStore" placeholder="Ej: Liverpool"></div>
+    <div class="form-group"><label>Monto total</label><input id="mTotal" type="number" step="0.01" placeholder="0.00"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="form-group"><label>Numero de meses</label><input id="mMonths" type="number" min="1" max="60" placeholder="12"></div>
+      <div class="form-group"><label>Pago mensual</label><input id="mMonthly" type="number" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="form-group"><label>Meses ya pagados</label><input id="mPaid" type="number" min="0" value="0" placeholder="0"></div>
+    <div class="form-group"><label>Tarjeta</label><select id="mCard"></select></div>
+    <div class="form-group"><label>Fecha de inicio</label><input id="mStart" type="date"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-delete" id="mDelBtn" style="display:none" onclick="deleteMsi()">Eliminar</button>
+      <button class="btn-save" onclick="saveMsi()">Guardar</button>
     </div>
   </div>
 </div>
