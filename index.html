@@ -353,7 +353,7 @@ function renderDashboard(){
   // Summary
   let monthlyTotal=0, next7=0;
   var _loanItems=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:parseFloat(l.monthly||0),cycle:'monthly',emoji:l.emoji||'🏦',name:l.name});});
-  const allItems = [...Object.values(state.subs||{}), ...Object.values(state.svcs||{}), ..._loanItems];
+  const allItems = [...Object.values(state.subs||{}).filter(function(i){return !i.paused;}), ...Object.values(state.svcs||{}).filter(function(i){return !i.paused;}), ..._loanItems];
   allItems.forEach(i=>{ monthlyTotal+=toMonthly(i.amount,i.cycle); if(daysUntil(i.nextDate)<=7) next7+=parseFloat(i.amount||0); });
   const totalLimit = Object.values(state.cards||{}).filter(c=>c.type==='credit').reduce((a,c)=>a+parseFloat(c.limit||0),0);
   const totalBalance = Object.values(state.cards||{}).filter(c=>c.type==='credit').reduce((a,c)=>a+parseFloat(c.balance||0),0);
@@ -409,7 +409,7 @@ function renderCalendar(){
   // Events
   const events={};
   var _calLoanEntries=Object.entries(state.loans||{}).map(function(e){return[e[0],Object.assign({},e[1],{amount:parseFloat(e[1].monthly||0),cycle:'monthly',emoji:'🏦'})];});
-  const allEntries=[...Object.entries(state.subs||{}),...Object.entries(state.svcs||{}),..._calLoanEntries];
+  const allEntries=[...Object.entries(state.subs||{}).filter(function(e){return !e[1].paused;}),...Object.entries(state.svcs||{}).filter(function(e){return !e[1].paused;}),..._calLoanEntries];
   allEntries.forEach(function(entry){
     var itemId=entry[0],item=entry[1];
     if(!item||!item.nextDate) return;
@@ -456,7 +456,7 @@ function renderByCard(){
   let h='';
   cards.forEach(([cid,card])=>{
     const _byLoanItems=Object.values(state.loans||{}).filter(l=>l.cardId===cid).map(l=>Object.assign({},l,{amount:parseFloat(l.monthly||0),cycle:'monthly',emoji:'🏦'}));
-    const items=[...Object.values(state.subs||{}),...Object.values(state.svcs||{})].filter(i=>i.cardId===cid).concat(_byLoanItems);
+    const items=[...Object.values(state.subs||{}),...Object.values(state.svcs||{})].filter(i=>i.cardId===cid&&!i.paused).concat(_byLoanItems);
     const total=items.reduce((a,i)=>a+toMonthly(i.amount,i.cycle),0);
     h+='<div class="by-card-section"><div class="by-card-header"><div class="card-color" style="background:'+card.color+'"></div><div style="font-size:13px;font-weight:700">'+card.name+'</div><div class="by-card-total">'+fmtMoney(total,'MXN')+'/mes</div></div>';
     if(!items.length) h+='<div style="font-size:12px;color:#bbb">Sin asignaciones</div>';
@@ -476,7 +476,7 @@ function renderCards(){
   cards.forEach(([id,c])=>{
     const badge=c.type==='credit'?'<span class="card-badge badge-credit">Crédito</span>':c.type==='debit'?'<span class="card-badge badge-debit">Débito</span>':'<span class="card-badge badge-cash">Efectivo</span>';
     const meta=c.type==='credit'?'Límite: '+fmtMoney(c.limit,'MXN')+' · Corte día '+c.closingDay:c.type==='debit'?'Saldo: '+fmtMoney(c.balance,'MXN'):'';
-    h+='<div class="card-item"><div class="card-color" style="background:'+c.color+'"></div><div class="card-info"><div class="name">'+badge+c.name+'</div><div class="meta">'+meta+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openCardModal(this.dataset.id)" data-id='+id+'>✏️</button></div></div>';
+    h+='<div class="card-item"><div class="card-color" style="background:'+c.color+'"></div><div class="card-info"><div class="name">'+badge+c.name+'</div><div class="meta">'+meta+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openCardModal(this.dataset.id)" data-id='+id+'>✏️</button><button class="btn-icon" style="color:#e05252" onclick="deleteCardItem(this.dataset.id)" data-id='+id+' title="Eliminar tarjeta">🗑️</button></div></div>';
   });
   document.getElementById('cardsList').innerHTML=h;
 }
@@ -491,7 +491,7 @@ function renderSubs(){
     const dueClass=d<=3?'due-soon':'due-ok';
     const dueText=d===0?'Hoy':d===1?'Mañana':d<0?'Vencido':'En '+d+' días';
     const card=state.cards[s.cardId];
-    h+='<div class="sub-item"><div class="sub-emoji">'+(s.emoji||'📦')+'</div><div class="sub-info"><div class="name">'+s.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(s.amount,s.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(s.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSubModal(this.dataset.id)" data-id='+id+'>✏️</button></div></div>';
+    h+='<div class="sub-item" style="'+(s.paused?'opacity:0.52;':'')+'"><div class="sub-emoji">'+(s.emoji||'📦')+'</div><div class="sub-info"><div class="name">'+s.name+(s.paused?' <span style="font-size:9px;background:#fde68a;color:#92400e;padding:1px 5px;border-radius:4px">PAUSADO</span>':'')+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(s.amount,s.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(s.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSubModal(this.dataset.id)" data-id='+id+'>✏️</button><button class="btn-icon" style="color:'+(s.paused?'#16a34a':'#6b7280')+'" onclick="togglePauseSub(this.dataset.id)" data-id='+id+' title="'+(s.paused?'Reactivar':'Pausar')+'">'+(s.paused?'▶️':'⏸️')+'</button><button class="btn-icon" style="color:#e05252" onclick="deleteSubItem(this.dataset.id)" data-id='+id+' title="Eliminar">🗑️</button></div></div>';
   });
   document.getElementById('subsList').innerHTML=h;
 }
@@ -507,7 +507,7 @@ function renderSvcs(){
     const dueText=d===0?'Hoy':d===1?'Mañana':d<0?'Vencido':'En '+d+' días';
     const card=state.cards[v.cardId];
     const emoji=v.cat?v.cat.split(' ')[0]:'📦';
-    h+='<div class="sub-item"><div class="sub-emoji">'+emoji+'</div><div class="sub-info"><div class="name">'+v.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(v.amount,v.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(v.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSvcModal(this.dataset.id)" data-id='+id+'>✏️</button></div></div>';
+    h+='<div class="sub-item" style="'+(v.paused?'opacity:0.52;':'')+'"><div class="sub-emoji">'+emoji+'</div><div class="sub-info"><div class="name">'+v.name+(v.paused?' <span style="font-size:9px;background:#fde68a;color:#92400e;padding:1px 5px;border-radius:4px">PAUSADO</span>':'')+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(v.amount,v.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(v.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSvcModal(this.dataset.id)" data-id='+id+'>✏️</button><button class="btn-icon" style="color:'+(v.paused?'#16a34a':'#6b7280')+'" onclick="togglePauseSvc(this.dataset.id)" data-id='+id+' title="'+(v.paused?'Reactivar':'Pausar')+'">'+(v.paused?'▶️':'⏸️')+'</button><button class="btn-icon" style="color:#e05252" onclick="deleteSvcItem(this.dataset.id)" data-id='+id+' title="Eliminar">🗑️</button></div></div>';
   });
   document.getElementById('svcList').innerHTML=h;
 }
@@ -644,6 +644,34 @@ function updateNotifBtn(){
   if(Notification.permission==='granted') document.getElementById('notifBtn').textContent='🔔 Alertas ON';
 }
 
+function deleteCardItem(id){
+  if(!confirm('¿Eliminar esta tarjeta?')) return;
+  delete state.cards[id]; save(); renderCards(); renderDashboard();
+}
+function deleteSubItem(id){
+  if(!confirm('¿Eliminar esta suscripción?')) return;
+  delete state.subs[id]; save(); renderSubs(); renderDashboard(); renderSmartRecs();
+}
+function deleteSvcItem(id){
+  if(!confirm('¿Eliminar este servicio?')) return;
+  delete state.svcs[id]; save(); renderSvcs(); renderDashboard(); renderSmartRecs();
+}
+function deleteLoanItem(id){
+  if(!confirm('¿Eliminar este préstamo?')) return;
+  delete state.loans[id]; save(); renderLoans(); renderDashboard(); renderSmartRecs();
+}
+function deleteMsiItem(id){
+  if(!confirm('¿Eliminar este MSI?')) return;
+  delete state.msi[id]; save(); renderMsi(); renderDashboard();
+}
+function togglePauseSub(id){
+  var s=state.subs[id]; if(!s) return;
+  s.paused=!s.paused; save(); renderSubs(); renderDashboard(); renderSmartRecs();
+}
+function togglePauseSvc(id){
+  var s=state.svcs[id]; if(!s) return;
+  s.paused=!s.paused; save(); renderSvcs(); renderDashboard(); renderSmartRecs();
+}
 // -- Card calendar helpers --
 function nextDateForDay(day){
   var today=new Date();
@@ -749,7 +777,7 @@ function renderLoans(){
     h+='</div>';
     h+='<div style="margin-top:8px;font-size:11px;color:#888">Restante: '+fmtMoney(l.remaining,l.currency)+' de '+fmtMoney(l.total,l.currency)+' ('+pct+'% pagado)</div>';
     h+='<div class="loan-progress"><div class="loan-bar" style="width:'+pct+'%"></div></div>';
-    h+='<div style="text-align:right;margin-top:6px"><button class="btn-icon" style="font-size:12px;border:1px solid #eee;padding:3px 8px;border-radius:6px" onclick="openLoanModal(this.dataset.id)" data-id="'+id+'">✏️ Editar</button></div>';
+    h+='<div style="text-align:right;margin-top:6px"><button class="btn-icon" style="font-size:12px;border:1px solid #eee;padding:3px 8px;border-radius:6px" onclick="openLoanModal(this.dataset.id)" data-id="'+id+'">✏️ Editar</button><button class="btn-icon" style="font-size:12px;border:1px solid #fee2e2;padding:3px 8px;border-radius:6px;color:#e05252;margin-left:6px" onclick="deleteLoanItem(this.dataset.id)" data-id="'+id+'" title="Eliminar préstamo">🗑️</button></div>';
     h+='</div>';
   });
   document.getElementById('loansList').innerHTML=h;
@@ -855,11 +883,17 @@ function renderSmartRecs(){
   if(!el) return;
   var cash=parseFloat(state.cash||0);
   var creditCards=Object.entries(state.cards||{}).filter(function(e){return e[1].type==='credit';});
-  var _smLoanItems=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:parseFloat(l.monthly||0),cycle:'monthly',emoji:'🏦'});});
-  var allItems=[...Object.values(state.subs||{}),...Object.values(state.svcs||{}),..._smLoanItems,...getCreditCardItems()];
-  var upcoming=allItems.filter(function(i){var d=daysUntil(i.nextDate);return d>=0&&d<=30;})
+  // Normalize loans
+  var _loanItems=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:parseFloat(l.monthly||0),cycle:'monthly',emoji:'🏦'});});
+  // Regular items (eligible for card payment): subs + svcs (skip paused) + loans
+  var regularItems=[...Object.values(state.subs||{}).filter(function(i){return !i.paused;}),...Object.values(state.svcs||{}).filter(function(i){return !i.paused;}),..._loanItems];
+  // Card payment items: MUST use cash/bank transfer — never pay a card with a card
+  var cardPayItems=getCreditCardItems();
+  var allUpcoming=[...regularItems,...cardPayItems]
+    .filter(function(i){var d=daysUntil(i.nextDate);return d>=0&&d<=30;})
     .sort(function(a,b){return daysUntil(a.nextDate)-daysUntil(b.nextDate);});
   var fmt=function(n){return '$'+parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2});};
+  // Build scored cards with mutable available for greedy allocation
   var scoredCards=creditCards.map(function(e){
     var c=e[1];
     var daysLeft=c.dueDay?daysToDate(parseInt(c.dueDay)):999;
@@ -870,7 +904,7 @@ function renderSmartRecs(){
   }).sort(function(a,b){return b.daysLeft-a.daysLeft;});
   var h='';
   // == Efectivo ==
-  var upcomingTotal=upcoming.reduce(function(s,i){return s+parseFloat(i.amount||0);},0);
+  var upcomingTotal=allUpcoming.reduce(function(s,i){return s+parseFloat(i.amount||0);},0);
   var diff=cash-upcomingTotal;
   h+='<div style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #6ee7b7;border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">';
   h+='<div style="font-size:26px">💵</div><div style="flex:1">';
@@ -906,25 +940,38 @@ function renderSmartRecs(){
     toPay.forEach(function(sc){h+='<div style="font-size:12px;margin-bottom:3px">• <strong>'+sc.card.name+'</strong> — vence en '+sc.daysLeft+' días</div>';});
     h+='</div>';
   }
-  // == Plan de pagos ==
-  if(upcoming.length){
+  // == Plan de pagos (mínimo efectivo, máxima rotación de crédito) ==
+  if(allUpcoming.length){
     h+='<div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📋 Plan de pagos próximos</div>';
-    var cashLeft=cash;
-    upcoming.forEach(function(item){
+    // Mutable copy of available credit for greedy allocation (prevents over-commitment)
+    var cardPool=scoredCards.map(function(sc){return{id:sc.id,card:sc.card,daysLeft:sc.daysLeft,available:sc.available};});
+    allUpcoming.forEach(function(item){
       var d=daysUntil(item.nextDate);
       var amt=parseFloat(item.amount||0);
       var dText=d===0?'Hoy':d===1?'Mañana':'En '+d+' días';
       var sug,sCol,sBg;
-      var usable=scoredCards.filter(function(sc){return sc.daysLeft>d;});
-      var best=usable.length?usable[0]:(scoredCards.length?scoredCards[0]:null);
-      if(cashLeft>=amt&&amt>0){sug='💵 Efectivo';sCol='#166534';sBg='#f0fdf4';cashLeft-=amt;}
-      else if(best&&best.daysLeft>d){sug='💳 '+best.card.name;sCol='#1e40af';sBg='#eff6ff';}
-      else if(best){sug='⚠️ '+best.card.name;sCol='#92400e';sBg='#fffbeb';}
-      else{sug='💵 Efectivo';sCol='#166534';sBg='#f0fdf4';}
+      if(item.cardId){
+        // Credit card due payment: ALWAYS cash/bank transfer, never circular credit
+        var payAmt=parseFloat((item._card&&(item._card.noInterest||item._card.minimum))||0);
+        if(payAmt>0) amt=payAmt;
+        sug='🏦 Transferencia / Efectivo';sCol='#1e40af';sBg='#eff6ff';
+      } else {
+        // Regular item: find card with enough available AND enough days before its own payment
+        var eligible=cardPool.filter(function(sc){return sc.available>=amt&&sc.daysLeft>d;})
+          .sort(function(a,b){return b.daysLeft-a.daysLeft;}); // prefer card with most runway
+        if(eligible.length&&amt>0){
+          var best=eligible[0];
+          best.available-=amt; // greedy deduction prevents over-allocation
+          sug='💳 '+best.card.name;sCol='#1e40af';sBg='#eff6ff';
+        } else {
+          // No card qualifies — use cash as last resort
+          sug='💵 Efectivo';sCol='#166534';sBg='#f0fdf4';
+        }
+      }
       h+='<div style="background:#fff;border-radius:10px;padding:9px 12px;margin-bottom:7px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:8px">';
       h+='<span style="font-size:16px">'+(item.emoji||'📦')+'</span>';
       h+='<div style="flex:1"><div style="font-size:12px;font-weight:700">'+item.name+'</div>';
-      h+='<div style="font-size:11px;color:#888">'+dText+' · '+fmt(amt)+'</div></div>';
+      h+='<div style="font-size:11px;color:#888">'+dText+(amt>0?' · '+fmt(amt):'')+'</div></div>';
       h+='<div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:'+sBg+';color:'+sCol+';white-space:nowrap">'+sug+'</div></div>';
     });
   }
@@ -1257,7 +1304,7 @@ function renderMsi(){
     h+='<div style="display:flex;justify-content:space-between;font-size:11px;color:#888">';
     h+='<span>Por pagar: '+fmt(remainingAmt)+' ('+remaining+' meses)</span>';
     h+='<span>Total: '+fmt(m.total||0)+'</span></div>';
-    h+='<div style="text-align:right;margin-top:8px"><button class="btn-icon" style="font-size:12px;border:1px solid #eee;padding:3px 8px;border-radius:6px" onclick="openMsiModal(this.dataset.id)" data-id="'+id+'">&#9999; Editar</button></div>';
+    h+='<div style="text-align:right;margin-top:8px"><button class="btn-icon" style="font-size:12px;border:1px solid #eee;padding:3px 8px;border-radius:6px" onclick="openMsiModal(this.dataset.id)" data-id="'+id+'">&#9999; Editar</button><button class="btn-icon" style="font-size:12px;border:1px solid #fee2e2;padding:3px 8px;border-radius:6px;color:#e05252;margin-left:6px" onclick="deleteMsiItem(this.dataset.id)" data-id="'+id+'" title="Eliminar MSI">🗑️</button></div>';
     h+='</div>';
   });
   if(listEl) listEl.innerHTML=h;
