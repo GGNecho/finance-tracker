@@ -685,16 +685,48 @@ function getCreditCardItems(){
     var id=e[0],c=e[1];
     if(c.type!=='credit'||!c.dueDay) return;
     var nextDate=nextDateForDay(parseInt(c.dueDay));
-    items.push({cardId:id,name:'Pago '+c.name,emoji:'💳',amount:0,currency:'MXN',cycle:'monthly',nextDate:nextDate,_card:c});
+    var amt=parseFloat(c.noInterest||c.minimum||0);
+    items.push({cardId:id,name:'Pago '+c.name,emoji:'💳',amount:amt,currency:'MXN',cycle:'monthly',nextDate:nextDate,_card:c});
   });
   return items;
 }
+// Update card balance when an item is marked paid/unpaid
+function updateCardBalance(key,dir){
+  var itemId=key.split('-').slice(2).join('-');
+  if(itemId.startsWith('card-')){
+    // Paying off card bill → REDUCE balance
+    var cId=itemId.slice(5);
+    var c=(state.cards||{})[cId];
+    if(!c||c.type!=='credit') return;
+    var payAmt=parseFloat(c.noInterest||c.minimum||0);
+    if(payAmt<=0) return;
+    c.balance=Math.max(0,parseFloat(c.balance||0)-dir*payAmt);
+  } else {
+    // Paying sub/svc/loan with a card → INCREASE card balance
+    var item=((state.subs||{})[itemId])||((state.svcs||{})[itemId])||((state.loans||{})[itemId]);
+    if(!item||!item.cardId) return;
+    var c=(state.cards||{})[item.cardId];
+    if(!c||c.type!=='credit') return;
+    var amt=parseFloat(item.amount||item.monthly||0);
+    if(amt<=0) return;
+    c.balance=Math.max(0,parseFloat(c.balance||0)+dir*amt);
+  }
+}
 function togglePaid(key){
   if(!state.paid) state.paid={};
-  if(state.paid[key]) delete state.paid[key];
-  else state.paid[key]=true;
+  if(state.paid[key]){
+    delete state.paid[key];
+    updateCardBalance(key,-1);
+  } else {
+    state.paid[key]=true;
+    updateCardBalance(key,+1);
+  }
   save();
   renderCalendar();
+  renderCards();
+  renderDashboard();
+  if(typeof renderCardHealth==='function') renderCardHealth();
+  if(typeof renderSmartRecs==='function') renderSmartRecs();
 }
 function editCash(){
   var cur=parseFloat(state.cash||0);
