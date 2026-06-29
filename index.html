@@ -385,7 +385,7 @@ function renderCards(){
   cards.forEach(([id,c])=>{
     const badge=c.type==='credit'?'<span class="card-badge badge-credit">Crédito</span>':c.type==='debit'?'<span class="card-badge badge-debit">Débito</span>':'<span class="card-badge badge-cash">Efectivo</span>';
     const meta=c.type==='credit'?'Límite: '+fmtMoney(c.limit,'MXN')+' · Corte día '+c.closingDay:c.type==='debit'?'Saldo: '+fmtMoney(c.balance,'MXN'):'';
-    h+='<div class="card-item"><div class="card-color" style="background:'+c.color+'"></div><div class="card-info"><div class="name">'+badge+c.name+'</div><div class="meta">'+meta+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openCardModal(''+id+'')">✏️</button></div></div>';
+    h+='<div class="card-item"><div class="card-color" style="background:'+c.color+'"></div><div class="card-info"><div class="name">'+badge+c.name+'</div><div class="meta">'+meta+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openCardModal(this.dataset.id)" data-id='+id+'>✏️</button></div></div>';
   });
   document.getElementById('cardsList').innerHTML=h;
 }
@@ -400,7 +400,7 @@ function renderSubs(){
     const dueClass=d<=3?'due-soon':'due-ok';
     const dueText=d===0?'Hoy':d===1?'Mañana':d<0?'Vencido':'En '+d+' días';
     const card=state.cards[s.cardId];
-    h+='<div class="sub-item"><div class="sub-emoji">'+(s.emoji||'📦')+'</div><div class="sub-info"><div class="name">'+s.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(s.amount,s.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(s.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSubModal(''+id+'')">✏️</button></div></div>';
+    h+='<div class="sub-item"><div class="sub-emoji">'+(s.emoji||'📦')+'</div><div class="sub-info"><div class="name">'+s.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(s.amount,s.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(s.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSubModal(this.dataset.id)" data-id='+id+'>✏️</button></div></div>';
   });
   document.getElementById('subsList').innerHTML=h;
 }
@@ -416,7 +416,7 @@ function renderSvcs(){
     const dueText=d===0?'Hoy':d===1?'Mañana':d<0?'Vencido':'En '+d+' días';
     const card=state.cards[v.cardId];
     const emoji=v.cat?v.cat.split(' ')[0]:'📦';
-    h+='<div class="sub-item"><div class="sub-emoji">'+emoji+'</div><div class="sub-info"><div class="name">'+v.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(v.amount,v.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(v.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSvcModal(''+id+'')">✏️</button></div></div>';
+    h+='<div class="sub-item"><div class="sub-emoji">'+emoji+'</div><div class="sub-info"><div class="name">'+v.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(v.amount,v.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(v.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSvcModal(this.dataset.id)" data-id='+id+'>✏️</button></div></div>';
   });
   document.getElementById('svcList').innerHTML=h;
 }
@@ -425,7 +425,7 @@ function renderSvcs(){
 const COLORS_LIST=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#607d8b','#795548'];
 let selectedColor=COLORS_LIST[5];
 function initColorPicker(){
-  document.getElementById('colorPicker').innerHTML=COLORS_LIST.map(c=>'<div class="color-dot'+(c===selectedColor?' selected':'')+'" style="background:'+c+'" onclick="selectColor(''+c+'')"></div>').join('');
+  document.getElementById('colorPicker').innerHTML=COLORS_LIST.map(c=>'<div class="color-dot'+(c===selectedColor?' selected':'')+'" style="background:'+c+'" onclick="selectColor(this.dataset.color)" data-color='+c+'></div>').join('');
 }
 function selectColor(c){ selectedColor=c; initColorPicker(); }
 function openCardModal(id){
