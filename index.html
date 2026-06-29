@@ -114,7 +114,28 @@ header h1{font-size:16px;font-weight:700;flex:1}
 .rec-box.rec-ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
 .rec-box.rec-warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
 .rec-box.rec-danger{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+
+/* Import */
+.drop-zone{border:2px dashed #c0c8f0;border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;background:#f8f9ff;transition:.2s;margin-bottom:16px}
+.drop-zone:hover,.drop-zone.drag-over{border-color:#4a6cf7;background:#eef1ff}
+.drop-zone-icon{font-size:36px;margin-bottom:8px}
+.drop-zone-text{font-size:13px;color:#555}
+.drop-zone-sub{font-size:11px;color:#aaa;margin-top:4px}
+.bank-badges{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.bank-badge{font-size:10px;padding:2px 8px;border-radius:20px;background:#e8eaf0;color:#555}
+.import-progress{background:#f0f2f8;border-radius:8px;height:6px;margin-bottom:12px;overflow:hidden;display:none}
+.import-bar{height:100%;background:linear-gradient(90deg,#4a6cf7,#9b59b6);transition:width .3s}
+.tx-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px}
+.tx-table th{background:#f8f9fc;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;border-bottom:2px solid #e8eaf0}
+.tx-table td{padding:7px 10px;border-bottom:1px solid #f0f2f8;vertical-align:middle}
+.tx-table tr:hover td{background:#f8f9ff}
+.tx-check{width:16px;height:16px;cursor:pointer}
+.tx-amount-neg{color:#e05252;font-weight:600}
+.tx-amount-pos{color:#27ae60;font-weight:600}
+.import-actions{display:flex;gap:8px;margin-bottom:20px}
+.import-section-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 
@@ -130,6 +151,7 @@ header h1{font-size:16px;font-weight:700;flex:1}
   <div class="nav-tab" onclick="showTab('subs',this)">🔁 Suscripciones</div>
   <div class="nav-tab" onclick="showTab('servicios',this)">🏠 Servicios</div>
   <div class="nav-tab" onclick="showTab('prestamos',this)">🤝 Préstamos</div>
+  <div class="nav-tab" onclick="showTab('importar',this)">📄 Importar</div>
 </div>
 
 <!-- DASHBOARD -->
@@ -145,8 +167,6 @@ header h1{font-size:16px;font-weight:700;flex:1}
   <div class="day-timeline" id="dayTimeline"></div>
   <div class="section-title">💳 Salud de tarjetas</div>
   <div id="cardHealth"></div>
-  <div style="margin-top:20px" class="section-title">🧠 Recomendaciones inteligentes</div>
-  <div id="smartRecs"></div>
 <div class="section-title">📅 Calendario</div>
   <div class="cal-header">
     <button class="cal-nav" onclick="changeMonth(-1)">‹</button>
@@ -289,6 +309,7 @@ function showTab(id,el){
   if(id==='subs') renderSubs();
   if(id==='servicios') renderSvcs();
   if(id==='prestamos') renderLoans();
+  // importar tab needs no render
 }
 
 // ── Persist ──
@@ -345,7 +366,6 @@ function renderDashboard(){
   renderByCard();
   renderDayTimeline();
   renderCardHealth();
-  renderSmartRecs();
 }
 
 function sumCard(label,value,sub){
@@ -723,102 +743,6 @@ function renderCardHealth(){
   document.getElementById('cardHealth').innerHTML=h;
 }
 
-
-// ── Smart card recommendation ──
-function daysUntilPaymentIfCharged(card){
-  if(!card || card.type !== 'credit') return -1;
-  var today = new Date();
-  var todayDay = today.getDate();
-  var closingDay = parseInt(card.closingDay||1);
-  var dueDay = parseInt(card.dueDay||1);
-  // If today <= closingDay: charge goes on current statement → pay on dueDay next month
-  // If today >  closingDay: charge goes on NEXT statement    → pay on dueDay two months out
-  var monthsAhead = todayDay <= closingDay ? 1 : 2;
-  var payDate = new Date(today.getFullYear(), today.getMonth() + monthsAhead, dueDay);
-  return Math.round((payDate - today) / (1000*60*60*24));
-}
-
-function bestCardRecommendation(){
-  // Returns [{cardId, card, days}, ...] sorted best first
-  var creditCards = Object.entries(state.cards||{}).filter(function(e){ return e[1].type==='credit'; });
-  var scored = creditCards.map(function(e){
-    return { cardId:e[0], card:e[1], days: daysUntilPaymentIfCharged(e[1]) };
-  });
-  scored.sort(function(a,b){ return b.days - a.days; });
-  return scored;
-}
-
-function renderSmartRecs(){
-  var el = document.getElementById('smartRecs');
-  if(!el) return;
-  var recs = bestCardRecommendation();
-  if(!recs.length){ el.innerHTML='<div class="empty">Agrega tarjetas de crédito para ver recomendaciones</div>'; return; }
-
-  // Upcoming payments in next 30 days
-  var allItems = [...Object.values(state.subs||{}), ...Object.values(state.svcs||{}), ...Object.values(state.loans||{})];
-  var upcoming = allItems.filter(function(i){ var d=daysUntil(i.nextDate); return d>=0 && d<=30; })
-                         .sort(function(a,b){ return daysUntil(a.nextDate)-daysUntil(b.nextDate); });
-
-  var best = recs[0];
-  var h = '';
-
-  // Best card banner
-  if(recs.length > 0){
-    h += '<div style="background:linear-gradient(135deg,#e8f4fd,#f0f8ff);border:1px solid #bee3f8;border-radius:12px;padding:14px;margin-bottom:14px">';
-    h += '<div style="font-size:11px;color:#2b6cb0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🏆 Mejor tarjeta ahora mismo</div>';
-    h += '<div style="display:flex;align-items:center;gap:10px">';
-    h += '<div class="card-color" style="background:'+best.card.color+';width:40px;height:26px;border-radius:6px"></div>';
-    h += '<div><div style="font-size:14px;font-weight:700">'+best.card.name+'</div>';
-    h += '<div style="font-size:11px;color:#555">Tienes <strong>'+best.days+' días</strong> para pagar sin intereses</div></div></div>';
-    if(recs.length > 1){
-      h += '<div style="margin-top:10px;border-top:1px solid #bee3f8;padding-top:10px;font-size:11px;color:#666">';
-      recs.slice(1).forEach(function(r){
-        h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
-        h += '<div style="width:10px;height:10px;border-radius:50%;background:'+r.card.color+'"></div>';
-        h += '<span>'+r.card.name+'</span><span style="margin-left:auto;color:#888">'+r.days+' días</span></div>';
-      });
-      h += '</div>';
-    }
-    h += '</div>';
-  }
-
-  // Per-payment recommendations
-  if(upcoming.length){
-    h += '<div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📋 Qué tarjeta usar para cada pago</div>';
-    upcoming.forEach(function(item){
-      var d = daysUntil(item.nextDate);
-      var dText = d===0?'Hoy':d===1?'Mañana':'En '+d+' días';
-      // Find best card that still covers this payment date
-      var best_for_item = recs[0]; // default to overall best
-      // If item has an assigned card with enough time, mention it
-      var assignedCard = state.cards[item.cardId];
-
-      h += '<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:flex-start;gap:10px">';
-      h += '<div style="font-size:18px">'+(item.emoji||'📦')+'</div>';
-      h += '<div style="flex:1">';
-      h += '<div style="font-size:12px;font-weight:600">'+item.name+' <span style="color:#888;font-weight:400">· '+dText+'</span></div>';
-      h += '<div style="font-size:11px;color:#888;margin-top:2px">'+fmtMoney(item.amount||item.monthly,item.currency)+'</div>';
-      h += '<div style="margin-top:6px;font-size:11px;padding:4px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;background:';
-      if(best_for_item && best_for_item.days >= d){
-        h += '#f0fdf4;color:#166534">';
-        h += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+best_for_item.card.color+'"></span>';
-        h += '💡 Usar <strong>'+best_for_item.card.name+'</strong> — '+best_for_item.days+'d para pagar</div>';
-      } else if(assignedCard && assignedCard.type==='credit'){
-        var assignedDays = daysUntilPaymentIfCharged(assignedCard);
-        h += '#f0fdf4;color:#166534">';
-        h += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+assignedCard.color+'"></span>';
-        h += '💡 Tarjeta asignada: <strong>'+assignedCard.name+'</strong> — '+assignedDays+'d para pagar</div>';
-      } else {
-        h += '#fff7ed;color:#9a3412">';
-        h += '⚠️ Sin tarjeta asignada</div>';
-      }
-      h += '</div></div>';
-    });
-  }
-
-  el.innerHTML = h;
-}
-
 <script>
 // ── Firebase Sync ──
 const _fbCfg = {
@@ -899,5 +823,27 @@ _auth.onAuthStateChanged(function(user){
     </div>
   </div>
 </div>
+
+<!-- IMPORTAR -->
+<div class="section" id="sec-importar">
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('pdfInput').click()">
+    <div class="drop-zone-icon">📄</div>
+    <div class="drop-zone-text">Arrastra tu estado de cuenta PDF aquí</div>
+    <div class="drop-zone-sub">o haz clic para seleccionar</div>
+    <div class="bank-badges">
+      <span class="bank-badge">BBVA</span>
+      <span class="bank-badge">Citibanamex</span>
+      <span class="bank-badge">Santander</span>
+      <span class="bank-badge">Banorte</span>
+      <span class="bank-badge">HSBC</span>
+      <span class="bank-badge">Inbursa</span>
+    </div>
+  </div>
+  <input type="file" id="pdfInput" accept=".pdf" style="display:none">
+  <div class="import-progress" id="importProgress"><div class="import-bar" id="importBar" style="width:0%"></div></div>
+  <div id="importStatus" style="font-size:12px;color:#888;margin-bottom:10px"></div>
+  <div id="importResults"></div>
+</div>
+
 </body>
 </html>
