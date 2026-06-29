@@ -871,7 +871,7 @@ function renderSmartRecs(){
     m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
     if(m){var y=parseInt(m[3]);if(y<100)y+=2000;return y+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}
     // DD-mon-YYYY (BBVA: 24-jun-2026)
-    m=s.match(/^(\d{1,2})-(\w{3})-(\d{2,4})$/i);
+    m=s.match(/^(\d{1,2})-(\w{3})-( \d{2,4})$/i);
     if(!m) m=s.match(/^(\d{1,2})-(\w{3})-(\d{2,4})$/i);
     if(m){var mo=MO[m[2].toLowerCase().substring(0,3)];if(mo!==undefined){var y=parseInt(m[3]);if(y<100)y+=2000;return y+'-'+String(mo+1).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}}
     // DD MMM YYYY (space separated)
@@ -940,7 +940,7 @@ function renderSmartRecs(){
         setTimeout(function(){setProgress(0);},600);
         renderImportResults(txs,file.name);
       }).catch(function(err){
-        setProgress(0);setStatus('Error: '+(err&&(err.message||err.name||JSON.stringify(err))),'#c0392b');
+        setProgress(0);setStatus('Error al leer el PDF. Esta protegido con contrasena?','#c0392b');
         console.error(err);
       });
     };
@@ -971,6 +971,37 @@ function renderSmartRecs(){
     }
     var seen={};
     return txs.filter(function(t){var k=t.date+"|"+t.amount;if(seen[k]) return false;seen[k]=true;return true;}).slice(0,200);
+  }
+  function fmtD(iso){if(!iso) return '';return iso.split('-').reverse().join('/');}
+  function fmtM(n){if(!n&&n!==0) return '';return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function renderImportResults(txs,filename){
+    var el=document.getElementById('importResults');
+    if(!txs.length){el.innerHTML='<div style="background:#fff3cd;border-radius:10px;padding:14px;font-size:13px">No se encontraron movimientos.</div>';return;}
+    var charges=txs.filter(function(t){return t.isCharge;});
+    var h='';
+    if(_pdfCutDate||_pdfDueDate||_pdfAmountDue){
+      h+='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 14px;margin-bottom:12px">';
+      h+='<div style="font-size:11px;font-weight:700;color:#166534;margin-bottom:8px">Datos extraidos</div>';
+      h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
+      if(_pdfCutDate) h+='<div style="background:#fff;border-radius:8px;padding:8px 12px;flex:1;min-width:100px;text-align:center"><div style="font-size:10px;color:#888">Fecha corte</div><div style="font-size:15px;font-weight:800;color:#1a1a2e">'+fmtD(_pdfCutDate)+'</div></div>';
+      if(_pdfDueDate){var dd=Math.round((new Date(_pdfDueDate)-new Date())/(864e5));h+='<div style="background:#fff;border-radius:8px;padding:8px 12px;flex:1;min-width:100px;text-align:center"><div style="font-size:10px;color:#888">Fecha limite</div><div style="font-size:15px;font-weight:800;color:#e05252">'+fmtD(_pdfDueDate)+'</div><div style="font-size:10px;color:#aaa">'+dd+' dias</div></div>';}
+      if(_pdfAmountDue) h+='<div style="background:#fff;border-radius:8px;padding:8px 12px;flex:1;min-width:100px;text-align:center"><div style="font-size:10px;color:#888">Monto a pagar</div><div style="font-size:15px;font-weight:800;color:#1a6faf">'+fmtM(_pdfAmountDue)+'</div>'+(_pdfMinPayment?'<div style="font-size:10px;color:#aaa">Min: '+fmtM(_pdfMinPayment)+'</div>':'')+'</div>';
+      h+='</div></div>';
+    } else {
+      h+='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:12px">'+filename+' &middot; '+txs.length+' movimientos</div>';
+    }
+    h+='<div class="import-section-title">Selecciona los cargos recurrentes</div>';
+    h+='<div class="import-actions"><button onclick="selectAllTx(true)" style="background:#f0f2f8;border:none;padding:6px 12px;border-radius:7px;font-size:11px;cursor:pointer">Seleccionar todos</button> ';
+    h+='<button onclick="selectAllTx(false)" style="background:#f0f2f8;border:none;padding:6px 12px;border-radius:7px;font-size:11px;cursor:pointer">Deseleccionar</button> ';
+    h+='<button onclick="importSelected()" style="background:#1a1a2e;color:#fff;border:none;padding:6px 14px;border-radius:7px;font-size:11px;cursor:pointer;font-weight:600">Importar seleccionados</button></div>';
+    h+='<table class="tx-table"><thead><tr><th></th><th>Fecha</th><th>Descripcion</th><th>Monto</th></tr></thead><tbody>';
+    charges.forEach(function(t){
+      h+='<tr><td><input type="checkbox" class="tx-check" data-desc="'+encodeURIComponent(t.desc)+'" data-amount="'+t.amount+'"></td>';
+      h+='<td style="color:#888;white-space:nowrap">'+t.date+'</td><td>'+t.desc+'</td>';
+      h+='<td class="tx-amount-neg">'+fmtM(t.amount)+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    el.innerHTML=h;
   }
     window.selectAllTx=function(val){document.querySelectorAll('.tx-check').forEach(function(cb){cb.checked=val;});};
 
