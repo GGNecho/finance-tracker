@@ -866,28 +866,40 @@ function renderSmartRecs(){
   function parseDateToISO(ds){
     if(!ds) return null;
     var MO={ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11};
-    var m=ds.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    var m,s=ds.trim();
+    // DD/MM/YYYY or DD-MM-YYYY (numeric month)
+    m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
     if(m){var y=parseInt(m[3]);if(y<100)y+=2000;return y+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}
-    m=ds.trim().match(/^(\d{1,2})\s+(?:de\s+)?(\w{3})[a-z]*\.?\s+(\d{2,4})$/i);
+    // DD-mon-YYYY (BBVA: 24-jun-2026)
+    m=s.match(/^(\d{1,2})-(\w{3})-( \d{2,4})$/i);
+    if(!m) m=s.match(/^(\d{1,2})-(\w{3})-(\d{2,4})$/i);
+    if(m){var mo=MO[m[2].toLowerCase().substring(0,3)];if(mo!==undefined){var y=parseInt(m[3]);if(y<100)y+=2000;return y+'-'+String(mo+1).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}}
+    // DD MMM YYYY (space separated)
+    m=s.match(/^(\d{1,2})\s+(?:de\s+)?(\w{3})[a-z]*\.?\s+(\d{2,4})$/i);
     if(m){var mo=MO[m[2].toLowerCase().substring(0,3)];if(mo!==undefined){var y=parseInt(m[3]);if(y<100)y+=2000;return y+'-'+String(mo+1).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}}
     return null;
   }
 
   function extractBankData(text){
     _pdfDueDate=null;_pdfCutDay=null;_pdfCutDate=null;_pdfAmountDue=null;_pdfMinPayment=null;
-    var t=text.replace(/\r?\n/g,' ').replace(/\s{2,}/g,' ');
+    // Normalize: collapse spaces, strip superscripts
+    var t=text.replace(/[\u00b9\u00b2\u00b3\u2070-\u2079]/g,'').replace(/\r?\n/g,' ').replace(/\s{2,}/g,' ');
+    // Date pattern: DD-mon-YYYY (BBVA) or DD/MM/YYYY or DD MMM YYYY
+    var DATE_PAT='(\\d{1,2}[-\\/]\\w{3,9}[-\\/]\\d{2,4}|\\d{1,2}[\\/]\\d{1,2}[\\/]\\d{2,4})';
+    // Optional weekday prefix: "martes, " or "lunes, " etc
+    var DAY_OPT='(?:\\w+,\\s*)?';
+    // Optional junk between label and date (colon, spaces, superscripts already stripped)
+    var SEP='[:\\s]*';
     var cutPats=[
-      /fecha\s+de\s+corte[:\s]+(\d{1,2}[\s\/\-]\w{2,9}[\s\/\-]\d{2,4})/i,
-      /fecha\s+de\s+corte[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /corte[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      new RegExp('fecha\\s+de\\s+corte'+SEP+DAY_OPT+DATE_PAT,'i'),
+      new RegExp('corte'+SEP+DAY_OPT+DATE_PAT,'i'),
     ];
     for(var i=0;i<cutPats.length;i++){var m=t.match(cutPats[i]);if(m&&m[1]){var iso=parseDateToISO(m[1].trim());if(iso){_pdfCutDate=iso;_pdfCutDay=parseInt(iso.split('-')[2]);break;}}}
     var duePats=[
-      /fecha\s+l[i\u00ed]mite\s+(?:de\s+)?pago[:\s]+(\d{1,2}[\s\/\-]\w{2,9}[\s\/\-]\d{2,4})/i,
-      /fecha\s+l[i\u00ed]mite\s+(?:de\s+)?pago[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /l[i\u00ed]mite\s+de\s+pago[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /fecha\s+de\s+pago[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /vencimiento[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      new RegExp('fecha\\s+l[i\u00ed]mite\\s+(?:de\\s+)?pago'+SEP+DAY_OPT+DATE_PAT,'i'),
+      new RegExp('l[i\u00ed]mite\\s+de\\s+pago'+SEP+DAY_OPT+DATE_PAT,'i'),
+      new RegExp('fecha\\s+de\\s+pago'+SEP+DAY_OPT+DATE_PAT,'i'),
+      new RegExp('vencimiento'+SEP+DAY_OPT+DATE_PAT,'i'),
     ];
     for(var i=0;i<duePats.length;i++){var m=t.match(duePats[i]);if(m&&m[1]){var iso=parseDateToISO(m[1].trim());if(iso){_pdfDueDate=iso;break;}}}
     var totPats=[
@@ -898,7 +910,7 @@ function renderSmartRecs(){
       /saldo\s+total[:\s]*\$?\s*([\d,]+\.\d{2})/i,
     ];
     for(var i=0;i<totPats.length;i++){var m=t.match(totPats[i]);if(m&&m[1]){_pdfAmountDue=parseFloat(m[1].replace(/,/g,''));break;}}
-    var minPats=[/pago\s+m[i\u00ed]nimo[:\s]*\$?\s*([\d,]+\.\d{2})/i];
+    var minPats=[/pago\s+m[ií]nimo[:\s]*\$?\s*([\d,]+\.\d{2})/i];
     for(var i=0;i<minPats.length;i++){var m=t.match(minPats[i]);if(m&&m[1]){_pdfMinPayment=parseFloat(m[1].replace(/,/g,''));break;}}
   }
 
