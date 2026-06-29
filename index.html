@@ -953,24 +953,24 @@ function renderSmartRecs(){
     for(var i=0;i<lines.length;i++){
       var line=lines[i].trim();if(line.length<8) continue;
       var dm=line.match(dateRe);if(!dm) continue;
-      if(/total\s+(cargos|abonos)|p\u00e1gina\s+\d|tarjeta\s+titular|num\.\s+de|tasa\s+de/i.test(line)) continue;
+      if(/total\s+(cargos|abonos)|tarjeta\s+titular|tasa\s+de/i.test(line)) continue;
       var rawAmounts=[],m,rc=/([-+]\s*\$\s*[\d,]+\.\d{2}|\$\s*[\d,]+\.\d{2})/g;
       while((m=rc.exec(line))!==null) rawAmounts.push(m[1]);
       if(!rawAmounts.length) continue;
       var rawLast=rawAmounts[rawAmounts.length-1];
-      var isNeg=rawLast.indexOf('-')!==-1;
-      var amount=parseFloat(rawLast.replace(/[^\d.]/g,''));
+      var isNeg=rawLast.indexOf("-")!==-1;
+      var amount=parseFloat(rawLast.replace(/[^\d.]/g,""));
       if(isNaN(amount)||amount<0.01) continue;
       var desc=line;
-      var allDates=line.match(new RegExp(dateRe.source,'gi'))||[];
-      allDates.forEach(function(d){desc=desc.replace(d,'');});
-      desc=desc.replace(/([-+]\s*\$\s*[\d,]+\.\d{2}|\$\s*[\d,]+\.\d{2})/g,'')
-               .replace(/[\*\|#_]+/g,' ').replace(/\s+/g,' ').trim();
+      var allDates=line.match(new RegExp(dateRe.source,"gi"))||[];
+      allDates.forEach(function(d){desc=desc.replace(d,"");});
+      desc=desc.replace(/([-+]\s*\$\s*[\d,]+\.\d{2}|\$\s*[\d,]+\.\d{2})/g,"")
+               .replace(/[\*\|#_]+/g," ").replace(/\s+/g," ").trim();
       if(desc.length<3||/^\d+$/.test(desc)) continue;
       txs.push({date:dm[1],desc:desc.substring(0,60),amount:amount,isCharge:!isNeg});
     }
     var seen={};
-    return txs.filter(function(t){var k=t.date+'|'+t.amount;if(seen[k]) return false;seen[k]=true;return true;}).slice(0,200);
+    return txs.filter(function(t){var k=t.date+"|"+t.amount;if(seen[k]) return false;seen[k]=true;return true;}).slice(0,200);
   }
     window.selectAllTx=function(val){document.querySelectorAll('.tx-check').forEach(function(cb){cb.checked=val;});};
 
