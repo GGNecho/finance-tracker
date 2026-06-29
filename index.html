@@ -889,7 +889,7 @@ function renderSmartRecs(){
     // Optional weekday prefix: "martes, " or "lunes, " etc
     var DAY_OPT='(?:\\w+,\\s*)?';
     // Optional junk between label and date (colon, spaces, superscripts already stripped)
-    var SEP='[:\\s]*';
+    var SEP='[:\\s]*(?:\\d(?!\\d)\\s*)?';
     var cutPats=[
       new RegExp('fecha\\s+de\\s+corte'+SEP+DAY_OPT+DATE_PAT,'i'),
       new RegExp('corte'+SEP+DAY_OPT+DATE_PAT,'i'),
@@ -903,14 +903,14 @@ function renderSmartRecs(){
     ];
     for(var i=0;i<duePats.length;i++){var m=t.match(duePats[i]);if(m&&m[1]){var iso=parseDateToISO(m[1].trim());if(iso){_pdfDueDate=iso;break;}}}
     var totPats=[
-      /pago\s+para\s+no\s+generar\s+intereses[:\s]*\$?\s*([\d,]+\.\d{2})/i,
+      /pago\s+para\s+no\s+generar\s+intereses[:\s]*(?:\d(?!\d)\s*)?\$?\s*([\d,]+\.\d{2})/i,
       /para\s+no\s+generar\s+intereses[:\s]*\$?\s*([\d,]+\.\d{2})/i,
       /pago\s+total[:\s]*\$?\s*([\d,]+\.\d{2})/i,
       /total\s+a\s+pagar[:\s]*\$?\s*([\d,]+\.\d{2})/i,
       /saldo\s+total[:\s]*\$?\s*([\d,]+\.\d{2})/i,
     ];
     for(var i=0;i<totPats.length;i++){var m=t.match(totPats[i]);if(m&&m[1]){_pdfAmountDue=parseFloat(m[1].replace(/,/g,''));break;}}
-    var minPats=[/pago\s+m[ií]nimo[:\s]*\$?\s*([\d,]+\.\d{2})/i];
+    var minPats=[/pago\s+m[ií]nimo[:\s]*(?:\d(?!\d)\s*)?\$?\s*([\d,]+\.\d{2})/i];
     for(var i=0;i<minPats.length;i++){var m=t.match(minPats[i]);if(m&&m[1]){_pdfMinPayment=parseFloat(m[1].replace(/,/g,''));break;}}
   }
 
