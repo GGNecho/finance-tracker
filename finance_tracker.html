@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Finance Tracker</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f6fb;color:#1a1a2e;min-height:100vh}
+header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+header h1{font-size:16px;font-weight:700;flex:1}
+.hbtn{font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.3);cursor:pointer;background:rgba(255,255,255,0.1);color:#fff;white-space:nowrap}
+.nav{display:flex;gap:4px;padding:12px 16px 0;background:#fff;border-bottom:2px solid #e8eaf0;overflow-x:auto}
+.nav-tab{padding:8px 14px;border-radius:8px 8px 0 0;font-size:12px;font-weight:600;cursor:pointer;border:2px solid transparent;border-bottom:none;background:#f0f2f8;color:#666;white-space:nowrap;transition:.15s}
+.nav-tab.active{background:#fff;color:#1a1a2e;border-color:#e8eaf0;margin-bottom:-2px}
+.section{display:none;padding:16px}
+.section.active{display:block}
+/* Summary cards */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.sum-card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.sum-card .label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.sum-card .value{font-size:20px;font-weight:700;color:#1a1a2e}
+.sum-card .sub{font-size:10px;color:#aaa;margin-top:2px}
+/* Cards list */
+.card-item{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);display:flex;align-items:center;gap:12px}
+.card-color{width:36px;height:24px;border-radius:6px;flex-shrink:0}
+.card-info{flex:1}
+.card-info .name{font-size:13px;font-weight:600}
+.card-info .meta{font-size:11px;color:#888;margin-top:2px}
+.card-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;margin-right:4px}
+.badge-credit{background:#e8f4fd;color:#1a6faf}
+.badge-debit{background:#e8fdf0;color:#1a7a45}
+.badge-cash{background:#fdf8e8;color:#8a6d0b}
+/* Sub/service items */
+.sub-item{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.07);display:flex;align-items:center;gap:10px}
+.sub-emoji{font-size:22px;width:36px;text-align:center;flex-shrink:0}
+.sub-info{flex:1}
+.sub-info .name{font-size:13px;font-weight:600}
+.sub-info .meta{font-size:11px;color:#888;margin-top:2px}
+.sub-amount{font-size:14px;font-weight:700;color:#1a1a2e;white-space:nowrap}
+.sub-due{font-size:10px;margin-top:2px;text-align:right}
+.due-soon{color:#e05252;font-weight:600}
+.due-ok{color:#888}
+/* Actions */
+.item-actions{display:flex;gap:6px;margin-left:8px}
+.btn-icon{background:none;border:none;cursor:pointer;font-size:14px;padding:4px;border-radius:6px;color:#aaa;transition:.15s}
+.btn-icon:hover{background:#f0f2f8;color:#555}
+.add-btn{display:flex;align-items:center;gap:6px;background:#1a1a2e;color:#fff;border:none;padding:10px 16px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:14px}
+/* Calendar */
+.cal-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.cal-nav{background:none;border:1px solid #ddd;border-radius:7px;padding:4px 10px;cursor:pointer;font-size:14px}
+.cal-title{font-size:14px;font-weight:700;flex:1;text-align:center}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-day-name{font-size:10px;color:#888;text-align:center;padding:4px;font-weight:600}
+.cal-day{min-height:52px;background:#fff;border-radius:6px;padding:4px;position:relative;border:1px solid #f0f2f8}
+.cal-day.other-month{background:#f8f9fc;opacity:.5}
+.cal-day.today{border-color:#4a6cf7}
+.cal-day-num{font-size:10px;color:#888;margin-bottom:2px}
+.cal-event{font-size:9px;border-radius:3px;padding:1px 3px;margin-bottom:1px;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* By-card view */
+.by-card-section{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.by-card-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.by-card-total{margin-left:auto;font-size:13px;font-weight:700}
+.by-card-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f0f2f8;font-size:12px}
+.by-card-row:last-child{border-bottom:none}
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:20px;width:90%;max-width:380px;max-height:90vh;overflow-y:auto}
+.modal h2{font-size:15px;font-weight:700;margin-bottom:16px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:11px;color:#888;margin-bottom:4px;font-weight:600}
+.form-group input,.form-group select{width:100%;padding:9px 12px;border:1.5px solid #e0e4f0;border-radius:8px;font-size:13px;outline:none;transition:.15s}
+.form-group input:focus,.form-group select:focus{border-color:#4a6cf7}
+.color-picker{display:flex;gap:8px;flex-wrap:wrap}
+.color-dot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.15s}
+.color-dot.selected{border-color:#1a1a2e;transform:scale(1.2)}
+.modal-btns{display:flex;gap:8px;margin-top:16px}
+.modal-btns button{flex:1;padding:10px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600}
+.btn-cancel{background:#f0f2f8;color:#555}
+.btn-save{background:#1a1a2e;color:#fff}
+.btn-delete{background:#fde8e8;color:#c0392b}
+/* Notifications banner */
+.notif-banner{background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;display:flex;align-items:center;gap:8px}
+.notif-banner button{margin-left:auto;background:#ffc107;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600}
+.notif-list{margin-bottom:14px}
+.notif-item{background:#fff;border-left:3px solid #e05252;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.notif-item .ni-title{font-weight:600;color:#1a1a2e}
+.notif-item .ni-sub{color:#888;margin-top:2px}
+.section-title{font-size:13px;font-weight:700;color:#555;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+.empty{text-align:center;color:#bbb;padding:30px;font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💳 Finance Tracker</h1>
+  <button class="hbtn" id="notifBtn" onclick="requestNotifPerm()">🔔 Activar alertas</button>
+  <button class="hbtn" id="fbBtn">☁️ Sync</button>
+</header>
+
+<div class="nav">
+  <div class="nav-tab active" onclick="showTab('dashboard',this)">📊 Dashboard</div>
+  <div class="nav-tab" onclick="showTab('tarjetas',this)">💳 Tarjetas</div>
+  <div class="nav-tab" onclick="showTab('subs',this)">🔁 Suscripciones</div>
+  <div class="nav-tab" onclick="showTab('servicios',this)">🏠 Servicios</div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="section active" id="sec-dashboard">
+  <div id="notifBanner" class="notif-banner" style="display:none">
+    ⚠️ Tienes pagos próximos en los siguientes 7 días
+    <button onclick="checkUpcoming(true)">Ver</button>
+  </div>
+  <div class="summary-grid" id="summaryGrid"></div>
+  <div id="upcomingList"></div>
+  <div class="section-title">📅 Calendario</div>
+  <div class="cal-header">
+    <button class="cal-nav" onclick="changeMonth(-1)">‹</button>
+    <div class="cal-title" id="calTitle"></div>
+    <button class="cal-nav" onclick="changeMonth(1)">›</button>
+  </div>
+  <div class="cal-grid" id="calGrid"></div>
+  <div style="margin-top:20px" class="section-title">📋 Por Tarjeta</div>
+  <div id="byCardView"></div>
+</div>
+
+<!-- TARJETAS -->
+<div class="section" id="sec-tarjetas">
+  <button class="add-btn" onclick="openCardModal()">＋ Agregar tarjeta</button>
+  <div id="cardsList"></div>
+</div>
+
+<!-- SUSCRIPCIONES -->
+<div class="section" id="sec-subs">
+  <button class="add-btn" onclick="openSubModal()">＋ Agregar suscripción</button>
+  <div id="subsList"></div>
+</div>
+
+<!-- SERVICIOS -->
+<div class="section" id="sec-servicios">
+  <button class="add-btn" onclick="openSvcModal()">＋ Agregar servicio</button>
+  <div id="svcList"></div>
+</div>
+
+<!-- MODAL TARJETA -->
+<div class="modal-bg" id="cardModal">
+  <div class="modal">
+    <h2 id="cardModalTitle">Nueva Tarjeta</h2>
+    <div class="form-group"><label>Nombre</label><input id="cName" placeholder="Ej: Banamex Oro"></div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="cType"><option value="credit">Crédito</option><option value="debit">Débito</option><option value="cash">Efectivo</option></select>
+    </div>
+    <div class="form-group" id="cLimitGroup"><label>Límite de crédito</label><input id="cLimit" type="number" placeholder="0"></div>
+    <div class="form-group"><label>Saldo actual</label><input id="cBalance" type="number" placeholder="0"></div>
+    <div class="form-group" id="cClosingGroup"><label>Día de corte</label><input id="cClosing" type="number" min="1" max="31" placeholder="15"></div>
+    <div class="form-group"><label>Día de pago</label><input id="cDue" type="number" min="1" max="31" placeholder="5"></div>
+    <div class="form-group"><label>Color</label>
+      <div class="color-picker" id="colorPicker"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-delete" id="cDelBtn" style="display:none" onclick="deleteCard()">Eliminar</button>
+      <button class="btn-save" onclick="saveCard()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SUSCRIPCION -->
+<div class="modal-bg" id="subModal">
+  <div class="modal">
+    <h2 id="subModalTitle">Nueva Suscripción</h2>
+    <div class="form-group"><label>Emoji</label><input id="sEmoji" placeholder="🎵" maxlength="4" style="width:60px;text-align:center;font-size:20px"></div>
+    <div class="form-group"><label>Nombre</label><input id="sName" placeholder="Ej: Spotify"></div>
+    <div class="form-group"><label>Monto</label><input id="sAmount" type="number" step="0.01" placeholder="0.00"></div>
+    <div class="form-group"><label>Moneda</label>
+      <select id="sCurrency"><option value="MXN">MXN $</option><option value="USD">USD $</option><option value="EUR">EUR €</option></select>
+    </div>
+    <div class="form-group"><label>Ciclo</label>
+      <select id="sCycle"><option value="monthly">Mensual</option><option value="annual">Anual</option><option value="weekly">Semanal</option></select>
+    </div>
+    <div class="form-group"><label>Próximo pago</label><input id="sNextDate" type="date"></div>
+    <div class="form-group"><label>Tarjeta</label><select id="sCard"></select></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-delete" id="sDelBtn" style="display:none" onclick="deleteSub()">Eliminar</button>
+      <button class="btn-save" onclick="saveSub()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SERVICIO -->
+<div class="modal-bg" id="svcModal">
+  <div class="modal">
+    <h2 id="svcModalTitle">Nuevo Servicio</h2>
+    <div class="form-group"><label>Categoría</label>
+      <select id="vCat">
+        <option value="🏠 Renta">🏠 Renta</option>
+        <option value="💡 Electricidad">💡 Electricidad</option>
+        <option value="💧 Agua">💧 Agua</option>
+        <option value="🔥 Gas">🔥 Gas</option>
+        <option value="📱 Teléfono">📱 Teléfono</option>
+        <option value="🌐 Internet">🌐 Internet</option>
+        <option value="🏋️ Gimnasio">🏋️ Gimnasio</option>
+        <option value="📦 Otro">📦 Otro</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Nombre / Descripción</label><input id="vName" placeholder="Ej: TELMEX 200 MB"></div>
+    <div class="form-group"><label>Monto</label><input id="vAmount" type="number" step="0.01" placeholder="0.00"></div>
+    <div class="form-group"><label>Moneda</label>
+      <select id="vCurrency"><option value="MXN">MXN $</option><option value="USD">USD $</option><option value="EUR">EUR €</option></select>
+    </div>
+    <div class="form-group"><label>Ciclo</label>
+      <select id="vCycle"><option value="monthly">Mensual</option><option value="annual">Anual</option><option value="weekly">Semanal</option></select>
+    </div>
+    <div class="form-group"><label>Próximo pago</label><input id="vNextDate" type="date"></div>
+    <div class="form-group"><label>Tarjeta / Método</label><select id="vCard"></select></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModals()">Cancelar</button>
+      <button class="btn-delete" id="vDelBtn" style="display:none" onclick="deleteSvc()">Eliminar</button>
+      <button class="btn-save" onclick="saveSvc()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+const COLORS = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#607d8b','#795548'];
+let state = { cards:{}, subs:{}, svcs:{} };
+let calYear, calMonth;
+let editingCard=null, editingSub=null, editingSvc=null;
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+function fmtMoney(n,cur){ return (cur||'MXN')+' $'+parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function toMonthly(amount,cycle){ if(cycle==='annual') return amount/12; if(cycle==='weekly') return amount*4.33; return amount; }
+function daysUntil(dateStr){
+  if(!dateStr) return 999;
+  const d = new Date(dateStr+'T12:00:00'); const now = new Date();
+  now.setHours(0,0,0,0);
+  return Math.round((d-now)/(1000*60*60*24));
+}
+function fmtDate(dateStr){
+  if(!dateStr) return '';
+  const d = new Date(dateStr+'T12:00:00');
+  return d.toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+}
+
+// ── Tabs ──
+function showTab(id,el){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  el.classList.add('active');
+  if(id==='dashboard') renderDashboard();
+  if(id==='tarjetas') renderCards();
+  if(id==='subs') renderSubs();
+  if(id==='servicios') renderSvcs();
+}
+
+// ── Persist ──
+function save(){
+  try{ localStorage.setItem('finance_state', JSON.stringify(state)); }catch(e){}
+  renderAll();
+}
+function load(){
+  try{
+    const d = localStorage.getItem('finance_state');
+    if(d) state = JSON.parse(d);
+  }catch(e){}
+}
+
+// ── Render ──
+function renderAll(){
+  renderDashboard();
+  renderCards();
+  renderSubs();
+  renderSvcs();
+}
+
+function renderDashboard(){
+  // Summary
+  let monthlyTotal=0, next7=0;
+  const allItems = [...Object.values(state.subs||{}), ...Object.values(state.svcs||{})];
+  allItems.forEach(i=>{ monthlyTotal+=toMonthly(i.amount,i.cycle); if(daysUntil(i.nextDate)<=7) next7+=parseFloat(i.amount||0); });
+  const totalLimit = Object.values(state.cards||{}).filter(c=>c.type==='credit').reduce((a,c)=>a+parseFloat(c.limit||0),0);
+  const totalBalance = Object.values(state.cards||{}).filter(c=>c.type==='credit').reduce((a,c)=>a+parseFloat(c.balance||0),0);
+  document.getElementById('summaryGrid').innerHTML =
+    sumCard('Gasto mensual','MXN $'+monthlyTotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}),'suscripciones + servicios')+
+    sumCard('Próx. 7 días','MXN $'+next7.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}),'pagos inmediatos')+
+    sumCard('Crédito usado','MXN $'+totalBalance.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}),'de MXN $'+totalLimit.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}))+
+    sumCard('Tarjetas',Object.keys(state.cards||{}).length+' activas',(Object.values(state.cards||{}).filter(c=>c.type==='credit').length)+' crédito · '+(Object.values(state.cards||{}).filter(c=>c.type==='debit').length)+' débito');
+  // Upcoming
+  const upcoming = allItems.filter(i=>daysUntil(i.nextDate)<=7).sort((a,b)=>daysUntil(a.nextDate)-daysUntil(b.nextDate));
+  if(upcoming.length>0){
+    document.getElementById('notifBanner').style.display='flex';
+    let h='<div class="section-title">⚠️ Pagos próximos</div><div class="notif-list">';
+    upcoming.forEach(i=>{
+      const d=daysUntil(i.nextDate);
+      const card = state.cards[i.cardId];
+      const cardName = card?card.name:'Sin tarjeta';
+      h+='<div class="notif-item"><div class="ni-title">'+(i.emoji||'📦')+' '+i.name+'</div><div class="ni-sub">'+fmtMoney(i.amount,i.currency)+' · '+(d===0?'Hoy':d===1?'Mañana':'En '+d+' días')+' · '+cardName+'</div></div>';
+    });
+    h+='</div>';
+    document.getElementById('upcomingList').innerHTML=h;
+  } else {
+    document.getElementById('notifBanner').style.display='none';
+    document.getElementById('upcomingList').innerHTML='';
+  }
+  renderCalendar();
+  renderByCard();
+}
+
+function sumCard(label,value,sub){
+  return '<div class="sum-card"><div class="label">'+label+'</div><div class="value" style="font-size:15px">'+value+'</div><div class="sub">'+sub+'</div></div>';
+}
+
+// ── Calendar ──
+function initCal(){ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); }
+function changeMonth(d){ calMonth+=d; if(calMonth>11){calMonth=0;calYear++;} if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
+function renderCalendar(){
+  if(calYear===undefined) initCal();
+  const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('calTitle').textContent=months[calMonth]+' '+calYear;
+  const days=['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
+  let h=days.map(d=>'<div class="cal-day-name">'+d+'</div>').join('');
+  const first=new Date(calYear,calMonth,1);
+  let startDay=(first.getDay()+6)%7;
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const prevDays=new Date(calYear,calMonth,0).getDate();
+  const today=new Date(); today.setHours(0,0,0,0);
+  // Events
+  const events={};
+  const allItems=[...Object.values(state.subs||{}),...Object.values(state.svcs||{})];
+  allItems.forEach(item=>{
+    if(!item.nextDate) return;
+    const d=new Date(item.nextDate+'T12:00:00');
+    if(d.getFullYear()===calYear && d.getMonth()===calMonth){
+      const day=d.getDate();
+      if(!events[day]) events[day]=[];
+      const card=state.cards[item.cardId];
+      events[day].push({name:(item.emoji||'📦')+' '+item.name, color:card?card.color:'#888'});
+    }
+  });
+  // Prev month days
+  for(let i=0;i<startDay;i++){
+    h+='<div class="cal-day other-month"><div class="cal-day-num">'+(prevDays-startDay+i+1)+'</div></div>';
+  }
+  for(let d=1;d<=daysInMonth;d++){
+    const isToday=new Date(calYear,calMonth,d).getTime()===today.getTime();
+    let evHtml='';
+    (events[d]||[]).forEach(ev=>{ evHtml+='<div class="cal-event" style="background:'+ev.color+'">'+ev.name+'</div>'; });
+    h+='<div class="cal-day'+(isToday?' today':'')+'"><div class="cal-day-num">'+d+'</div>'+evHtml+'</div>';
+  }
+  const remaining=42-(startDay+daysInMonth);
+  for(let i=1;i<=Math.min(remaining,7);i++) h+='<div class="cal-day other-month"><div class="cal-day-num">'+i+'</div></div>';
+  document.getElementById('calGrid').innerHTML=h;
+}
+
+// ── By Card ──
+function renderByCard(){
+  const cards=Object.entries(state.cards||{});
+  if(!cards.length){ document.getElementById('byCardView').innerHTML='<div class="empty">Agrega tarjetas para ver el resumen</div>'; return; }
+  let h='';
+  cards.forEach(([cid,card])=>{
+    const items=[...Object.values(state.subs||{}),...Object.values(state.svcs||{})].filter(i=>i.cardId===cid);
+    const total=items.reduce((a,i)=>a+toMonthly(i.amount,i.cycle),0);
+    h+='<div class="by-card-section"><div class="by-card-header"><div class="card-color" style="background:'+card.color+'"></div><div style="font-size:13px;font-weight:700">'+card.name+'</div><div class="by-card-total">'+fmtMoney(total,'MXN')+'/mes</div></div>';
+    if(!items.length) h+='<div style="font-size:12px;color:#bbb">Sin asignaciones</div>';
+    items.forEach(i=>{
+      h+='<div class="by-card-row"><span>'+(i.emoji||'📦')+' '+i.name+'</span><span>'+fmtMoney(i.amount,i.currency)+'</span></div>';
+    });
+    h+='</div>';
+  });
+  document.getElementById('byCardView').innerHTML=h;
+}
+
+// ── Cards ──
+function renderCards(){
+  const cards=Object.entries(state.cards||{});
+  if(!cards.length){ document.getElementById('cardsList').innerHTML='<div class="empty">No tienes tarjetas. Agrega una ↑</div>'; return; }
+  let h='';
+  cards.forEach(([id,c])=>{
+    const badge=c.type==='credit'?'<span class="card-badge badge-credit">Crédito</span>':c.type==='debit'?'<span class="card-badge badge-debit">Débito</span>':'<span class="card-badge badge-cash">Efectivo</span>';
+    const meta=c.type==='credit'?'Límite: '+fmtMoney(c.limit,'MXN')+' · Corte día '+c.closingDay:c.type==='debit'?'Saldo: '+fmtMoney(c.balance,'MXN'):'';
+    h+='<div class="card-item"><div class="card-color" style="background:'+c.color+'"></div><div class="card-info"><div class="name">'+badge+c.name+'</div><div class="meta">'+meta+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openCardModal(''+id+'')">✏️</button></div></div>';
+  });
+  document.getElementById('cardsList').innerHTML=h;
+}
+
+// ── Subs ──
+function renderSubs(){
+  const subs=Object.entries(state.subs||{});
+  if(!subs.length){ document.getElementById('subsList').innerHTML='<div class="empty">No tienes suscripciones. Agrega una ↑</div>'; return; }
+  let h='';
+  subs.sort((a,b)=>daysUntil(a[1].nextDate)-daysUntil(b[1].nextDate)).forEach(([id,s])=>{
+    const d=daysUntil(s.nextDate);
+    const dueClass=d<=3?'due-soon':'due-ok';
+    const dueText=d===0?'Hoy':d===1?'Mañana':d<0?'Vencido':'En '+d+' días';
+    const card=state.cards[s.cardId];
+    h+='<div class="sub-item"><div class="sub-emoji">'+(s.emoji||'📦')+'</div><div class="sub-info"><div class="name">'+s.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(s.amount,s.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(s.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSubModal(''+id+'')">✏️</button></div></div>';
+  });
+  document.getElementById('subsList').innerHTML=h;
+}
+
+// ── Services ──
+function renderSvcs(){
+  const svcs=Object.entries(state.svcs||{});
+  if(!svcs.length){ document.getElementById('svcList').innerHTML='<div class="empty">No tienes servicios. Agrega uno ↑</div>'; return; }
+  let h='';
+  svcs.sort((a,b)=>daysUntil(a[1].nextDate)-daysUntil(b[1].nextDate)).forEach(([id,v])=>{
+    const d=daysUntil(v.nextDate);
+    const dueClass=d<=3?'due-soon':'due-ok';
+    const dueText=d===0?'Hoy':d===1?'Mañana':d<0?'Vencido':'En '+d+' días';
+    const card=state.cards[v.cardId];
+    const emoji=v.cat?v.cat.split(' ')[0]:'📦';
+    h+='<div class="sub-item"><div class="sub-emoji">'+emoji+'</div><div class="sub-info"><div class="name">'+v.name+'</div><div class="meta">'+(card?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+card.color+';margin-right:4px"></span>'+card.name:'Sin tarjeta')+'</div></div><div><div class="sub-amount">'+fmtMoney(v.amount,v.currency)+'</div><div class="sub-due '+dueClass+'">'+fmtDate(v.nextDate)+' · '+dueText+'</div></div><div class="item-actions"><button class="btn-icon" onclick="openSvcModal(''+id+'')">✏️</button></div></div>';
+  });
+  document.getElementById('svcList').innerHTML=h;
+}
+
+// ── Card Modal ──
+const COLORS_LIST=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#607d8b','#795548'];
+let selectedColor=COLORS_LIST[5];
+function initColorPicker(){
+  document.getElementById('colorPicker').innerHTML=COLORS_LIST.map(c=>'<div class="color-dot'+(c===selectedColor?' selected':'')+'" style="background:'+c+'" onclick="selectColor(''+c+'')"></div>').join('');
+}
+function selectColor(c){ selectedColor=c; initColorPicker(); }
+function openCardModal(id){
+  editingCard=id||null;
+  const c=id?state.cards[id]:{};
+  selectedColor=c.color||COLORS_LIST[5];
+  document.getElementById('cardModalTitle').textContent=id?'Editar Tarjeta':'Nueva Tarjeta';
+  document.getElementById('cName').value=c.name||'';
+  document.getElementById('cType').value=c.type||'credit';
+  document.getElementById('cLimit').value=c.limit||'';
+  document.getElementById('cBalance').value=c.balance||'';
+  document.getElementById('cClosing').value=c.closingDay||'';
+  document.getElementById('cDue').value=c.dueDay||'';
+  document.getElementById('cDelBtn').style.display=id?'block':'none';
+  initColorPicker();
+  document.getElementById('cardModal').classList.add('open');
+}
+function saveCard(){
+  const name=document.getElementById('cName').value.trim();
+  if(!name) return alert('Ingresa un nombre');
+  const id=editingCard||uid();
+  state.cards[id]={name, type:document.getElementById('cType').value, limit:document.getElementById('cLimit').value, balance:document.getElementById('cBalance').value, closingDay:document.getElementById('cClosing').value, dueDay:document.getElementById('cDue').value, color:selectedColor};
+  closeModals(); save();
+}
+function deleteCard(){
+  if(!editingCard||!confirm('¿Eliminar tarjeta?')) return;
+  delete state.cards[editingCard];
+  closeModals(); save();
+}
+
+// ── Sub Modal ──
+function cardOptions(selected){
+  const cards=Object.entries(state.cards||{});
+  let h='<option value="">Sin tarjeta</option>';
+  cards.forEach(([id,c])=>{ h+='<option value="'+id+'"'+(id===selected?' selected':'')+'>'+c.name+'</option>'; });
+  return h;
+}
+function openSubModal(id){
+  editingSub=id||null;
+  const s=id?state.subs[id]:{};
+  document.getElementById('subModalTitle').textContent=id?'Editar Suscripción':'Nueva Suscripción';
+  document.getElementById('sEmoji').value=s.emoji||'';
+  document.getElementById('sName').value=s.name||'';
+  document.getElementById('sAmount').value=s.amount||'';
+  document.getElementById('sCurrency').value=s.currency||'MXN';
+  document.getElementById('sCycle').value=s.cycle||'monthly';
+  document.getElementById('sNextDate').value=s.nextDate||new Date().toISOString().split('T')[0];
+  document.getElementById('sCard').innerHTML=cardOptions(s.cardId);
+  document.getElementById('sDelBtn').style.display=id?'block':'none';
+  document.getElementById('subModal').classList.add('open');
+}
+function saveSub(){
+  const name=document.getElementById('sName').value.trim();
+  if(!name) return alert('Ingresa un nombre');
+  const id=editingSub||uid();
+  state.subs[id]={emoji:document.getElementById('sEmoji').value, name, amount:document.getElementById('sAmount').value, currency:document.getElementById('sCurrency').value, cycle:document.getElementById('sCycle').value, nextDate:document.getElementById('sNextDate').value, cardId:document.getElementById('sCard').value};
+  closeModals(); save();
+}
+function deleteSub(){
+  if(!editingSub||!confirm('¿Eliminar suscripción?')) return;
+  delete state.subs[editingSub];
+  closeModals(); save();
+}
+
+// ── Svc Modal ──
+function openSvcModal(id){
+  editingSvc=id||null;
+  const v=id?state.svcs[id]:{};
+  document.getElementById('svcModalTitle').textContent=id?'Editar Servicio':'Nuevo Servicio';
+  document.getElementById('vCat').value=v.cat||'🏠 Renta';
+  document.getElementById('vName').value=v.name||'';
+  document.getElementById('vAmount').value=v.amount||'';
+  document.getElementById('vCurrency').value=v.currency||'MXN';
+  document.getElementById('vCycle').value=v.cycle||'monthly';
+  document.getElementById('vNextDate').value=v.nextDate||new Date().toISOString().split('T')[0];
+  document.getElementById('vCard').innerHTML=cardOptions(v.cardId);
+  document.getElementById('vDelBtn').style.display=id?'block':'none';
+  document.getElementById('svcModal').classList.add('open');
+}
+function saveSvc(){
+  const name=document.getElementById('vName').value.trim();
+  if(!name) return alert('Ingresa un nombre');
+  const id=editingSvc||uid();
+  state.svcs[id]={cat:document.getElementById('vCat').value, name, amount:document.getElementById('vAmount').value, currency:document.getElementById('vCurrency').value, cycle:document.getElementById('vCycle').value, nextDate:document.getElementById('vNextDate').value, cardId:document.getElementById('vCard').value};
+  closeModals(); save();
+}
+function deleteSvc(){
+  if(!editingSvc||!confirm('¿Eliminar servicio?')) return;
+  delete state.svcs[editingSvc];
+  closeModals(); save();
+}
+
+function closeModals(){
+  document.querySelectorAll('.modal-bg').forEach(m=>m.classList.remove('open'));
+}
+
+// ── Notifications ──
+function requestNotifPerm(){
+  if(!('Notification' in window)){ alert('Tu navegador no soporta notificaciones'); return; }
+  Notification.requestPermission().then(p=>{
+    if(p==='granted'){ checkUpcoming(true); document.getElementById('notifBtn').textContent='🔔 Alertas ON'; }
+  });
+}
+function checkUpcoming(showNotifs){
+  const allItems=[...Object.values(state.subs||{}),...Object.values(state.svcs||{})];
+  const soon=allItems.filter(i=>daysUntil(i.nextDate)<=7);
+  if(showNotifs && Notification.permission==='granted'){
+    soon.forEach(i=>{
+      const d=daysUntil(i.nextDate);
+      const when=d===0?'HOY':d===1?'mañana':'en '+d+' días';
+      new Notification('💳 Pago próximo: '+(i.emoji||'')+(i.name),{body:'Vence '+when+' — '+fmtMoney(i.amount,i.currency),icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💳</text></svg>'});
+    });
+  }
+  return soon.length;
+}
+function updateNotifBtn(){
+  if(Notification.permission==='granted') document.getElementById('notifBtn').textContent='🔔 Alertas ON';
+}
+
+// ── Init ──
+load();
+initCal();
+renderAll();
+updateNotifBtn();
+// Auto-check on load
+setTimeout(()=>checkUpcoming(Notification.permission==='granted'),1000);
+</script>
+
+<script>
+// ── Firebase Sync ──
+const _fbCfg = {
+  apiKey: "AIzaSyBAMgHvDHN3ZKxNYKlJuDM9KKPy3kS_kAo",
+  authDomain: "career-path-3a3e5.firebaseapp.com",
+  databaseURL: "https://career-path-3a3e5-default-rtdb.firebaseio.com",
+  projectId: "career-path-3a3e5",
+  storageBucket: "career-path-3a3e5.firebasestorage.app",
+  messagingSenderId: "471347438093",
+  appId: "1:471347438093:web:d9b8b50f11d6c584ee6b44"
+};
+if(!firebase.apps.length) firebase.initializeApp(_fbCfg);
+const _auth = firebase.auth();
+const _db   = firebase.database();
+let _uid = null;
+
+function _ref(){ return _db.ref('users/'+_uid+'/finance'); }
+
+const _save0 = save;
+save = function(){
+  _save0();
+  if(_uid) _ref().set(state);
+};
+
+function _updateBtn(){
+  const btn=document.getElementById('fbBtn');
+  if(!btn) return;
+  const user=_auth.currentUser;
+  if(user){
+    btn.textContent='☁️ '+user.displayName.split(' ')[0];
+    btn.style.cssText='font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid #8dd4a0;cursor:pointer;background:#e8f8ec;color:#2d8a40';
+    btn.onclick=function(){ _auth.signOut(); };
+  } else {
+    btn.textContent='☁️ Sync';
+    btn.style.cssText='font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.3);cursor:pointer;background:rgba(255,255,255,0.1);color:#fff';
+    btn.onclick=function(){ _auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(e){ alert('Error: '+e.message); }); };
+  }
+}
+
+_auth.onAuthStateChanged(function(user){
+  _updateBtn();
+  if(!user){ _uid=null; return; }
+  _uid=user.uid;
+  _ref().once('value').then(function(snap){
+    const d=snap.val();
+    if(d){ state=d; try{ localStorage.setItem('finance_state',JSON.stringify(state)); }catch(e){} }
+    renderAll();
+    setTimeout(()=>checkUpcoming(Notification.permission==='granted'),500);
+  });
+});
+</script>
+
+</body>
+</html>
