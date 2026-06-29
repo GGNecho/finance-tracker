@@ -352,12 +352,13 @@ function renderAll(){
 function renderDashboard(){
   // Summary
   let monthlyTotal=0, next7=0;
-  const allItems = [...Object.values(state.subs||{}), ...Object.values(state.svcs||{})];
+  var _loanItems=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:parseFloat(l.monthly||0),cycle:'monthly',emoji:l.emoji||'🏦',name:l.name});});
+  const allItems = [...Object.values(state.subs||{}), ...Object.values(state.svcs||{}), ..._loanItems];
   allItems.forEach(i=>{ monthlyTotal+=toMonthly(i.amount,i.cycle); if(daysUntil(i.nextDate)<=7) next7+=parseFloat(i.amount||0); });
   const totalLimit = Object.values(state.cards||{}).filter(c=>c.type==='credit').reduce((a,c)=>a+parseFloat(c.limit||0),0);
   const totalBalance = Object.values(state.cards||{}).filter(c=>c.type==='credit').reduce((a,c)=>a+parseFloat(c.balance||0),0);
   document.getElementById('summaryGrid').innerHTML =
-    sumCard('Gasto mensual','MXN $'+monthlyTotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}),'suscripciones + servicios')+
+    sumCard('Gasto mensual','MXN $'+monthlyTotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}),'suscripciones + servicios + préstamos')+
     sumCard('Próx. 7 días','MXN $'+next7.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}),'pagos inmediatos')+
     sumCard('Crédito usado','MXN $'+totalBalance.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}),'de MXN $'+totalLimit.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}))+
     sumCard('Tarjetas',Object.keys(state.cards||{}).length+' activas',(Object.values(state.cards||{}).filter(c=>c.type==='credit').length)+' crédito · '+(Object.values(state.cards||{}).filter(c=>c.type==='debit').length)+' débito')+
@@ -407,7 +408,8 @@ function renderCalendar(){
   const today=new Date(); today.setHours(0,0,0,0);
   // Events
   const events={};
-  const allEntries=[...Object.entries(state.subs||{}),...Object.entries(state.svcs||{})];
+  var _calLoanEntries=Object.entries(state.loans||{}).map(function(e){return[e[0],Object.assign({},e[1],{amount:parseFloat(e[1].monthly||0),cycle:'monthly',emoji:'🏦'})];});
+  const allEntries=[...Object.entries(state.subs||{}),...Object.entries(state.svcs||{}),..._calLoanEntries];
   allEntries.forEach(function(entry){
     var itemId=entry[0],item=entry[1];
     if(!item||!item.nextDate) return;
@@ -453,7 +455,8 @@ function renderByCard(){
   if(!cards.length){ document.getElementById('byCardView').innerHTML='<div class="empty">Agrega tarjetas para ver el resumen</div>'; return; }
   let h='';
   cards.forEach(([cid,card])=>{
-    const items=[...Object.values(state.subs||{}),...Object.values(state.svcs||{})].filter(i=>i.cardId===cid);
+    const _byLoanItems=Object.values(state.loans||{}).filter(l=>l.cardId===cid).map(l=>Object.assign({},l,{amount:parseFloat(l.monthly||0),cycle:'monthly',emoji:'🏦'}));
+    const items=[...Object.values(state.subs||{}),...Object.values(state.svcs||{})].filter(i=>i.cardId===cid).concat(_byLoanItems);
     const total=items.reduce((a,i)=>a+toMonthly(i.amount,i.cycle),0);
     h+='<div class="by-card-section"><div class="by-card-header"><div class="card-color" style="background:'+card.color+'"></div><div style="font-size:13px;font-weight:700">'+card.name+'</div><div class="by-card-total">'+fmtMoney(total,'MXN')+'/mes</div></div>';
     if(!items.length) h+='<div style="font-size:12px;color:#bbb">Sin asignaciones</div>';
@@ -852,7 +855,8 @@ function renderSmartRecs(){
   if(!el) return;
   var cash=parseFloat(state.cash||0);
   var creditCards=Object.entries(state.cards||{}).filter(function(e){return e[1].type==='credit';});
-  var allItems=[...Object.values(state.subs||{}),...Object.values(state.svcs||{}),...getCreditCardItems()];
+  var _smLoanItems=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:parseFloat(l.monthly||0),cycle:'monthly',emoji:'🏦'});});
+  var allItems=[...Object.values(state.subs||{}),...Object.values(state.svcs||{}),..._smLoanItems,...getCreditCardItems()];
   var upcoming=allItems.filter(function(i){var d=daysUntil(i.nextDate);return d>=0&&d<=30;})
     .sort(function(a,b){return daysUntil(a.nextDate)-daysUntil(b.nextDate);});
   var fmt=function(n){return '$'+parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2});};
