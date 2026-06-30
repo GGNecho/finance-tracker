@@ -1389,21 +1389,28 @@ function manualSave(){
       setTimeout(function(){_fbMyWrite=false},300);
     })
     .catch(function(e){
+      var msg=e.code==='PERMISSION_DENIED'?'Reglas Firebase vencidas — ve a la consola de Firebase':e.message;
       btn.textContent='✗ Error';
       btn.style.cssText='font-size:11px;padding:6px 12px;border-radius:8px;border:1px solid var(--rd);cursor:pointer;background:var(--bg3);color:var(--rd)';
+      btn.title=msg;
       _fbMyWrite=false;
-      console.error('Firebase save:',e);
+      alert('Error al guardar en Firebase:\n'+msg+'\n\nTus datos siguen en este dispositivo (localStorage).');
     });
 }
 
 function _applyRemote(d){
-  // Only apply remote if it's newer than current local state
-  if(d._ts && state._ts && state._ts > d._ts){
-    // Local is newer — push it up to Firebase
+  // Compare timestamps — treat missing _ts as 0 (ancient data)
+  var remoteTs=d._ts||0;
+  var localTs=state._ts||0;
+  if(localTs>remoteTs){
+    // Local is newer — push it up to Firebase and keep local state
     _fbMyWrite=true;
-    _ref().set(state).then(function(){setTimeout(function(){_fbMyWrite=false},300)}).catch(function(){_fbMyWrite=false});
-    return;
+    _ref().set(state)
+      .then(function(){setTimeout(function(){_fbMyWrite=false},300)})
+      .catch(function(){_fbMyWrite=false});
+    return;  // don't overwrite local state
   }
+  // Remote is newer or equal — apply it
   state=Object.assign({cards:{},subs:{},svcs:{},loans:{},msi:{},paid:{},cash:0,ingresos:{},gastos:{},periodos:[]},d);
   try{localStorage.setItem('finance_state',JSON.stringify(state))}catch(e){}
   renderAll();
