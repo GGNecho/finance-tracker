@@ -1325,30 +1325,42 @@ function closePayModal(){
   document.getElementById('payModal').classList.remove('open');
 }
 function renderPayModal(){
-  // Show ALL recurring items — user chooses which to mark as paid today
-  var cardItems=getCreditCardItems();
+  var all=[];
+  // Suscripciones y servicios
   var subs=Object.values(state.subs||{}).filter(function(i){return !i.paused});
   var svcs=Object.values(state.svcs||{}).filter(function(i){return !i.paused});
   var loans=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:l.monthly,emoji:'🏦'})});
-  var all=subs.concat(svcs).concat(loans).concat(cardItems);
-  // Sort: upcoming first, then by date
-  all.sort(function(a,b){
-    var da=daysUntil(a.nextDate),db=daysUntil(b.nextDate);
-    return da-db;
+  all=subs.concat(svcs).concat(loans);
+  // Tarjetas de crédito: una fila por tipo de pago configurado
+  Object.entries(state.cards||{}).forEach(function(entry){
+    var cid=entry[0],c=entry[1];
+    if(c.type!=='credit')return;
+    var due=c.dueDay?nextDateForDay(parseInt(c.dueDay)):null;
+    var d=due?daysUntil(due):999;
+    var dTxt=!due?'Sin fecha vencimiento':d===0?'🔴 Hoy':d===1?'🟡 Mañana':d<0?'⚠️ Hace '+Math.abs(d)+' días':'📅 En '+d+' días';
+    if(c.noInterest&&parseFloat(c.noInterest)>0)
+      all.push({emoji:'💳',name:c.name+' — Sin intereses',amount:parseFloat(c.noInterest),cardId:cid,nextDate:due,_dTxt:dTxt,_color:c.color});
+    if(c.minMsi&&parseFloat(c.minMsi)>0)
+      all.push({emoji:'💳',name:c.name+' — Mín+MSI',amount:parseFloat(c.minMsi),cardId:cid,nextDate:due,_dTxt:dTxt,_color:c.color});
+    if(c.minimum&&parseFloat(c.minimum)>0)
+      all.push({emoji:'💳',name:c.name+' — Mínimo',amount:parseFloat(c.minimum),cardId:cid,nextDate:due,_dTxt:dTxt,_color:c.color});
   });
+  // Ordenar por fecha más próxima
+  all.sort(function(a,b){return daysUntil(a.nextDate)-daysUntil(b.nextDate)});
   if(!all.length){
-    document.getElementById('payModalList').innerHTML='<div class="empty" style="padding:20px;text-align:center">Agrega suscripciones, servicios o préstamos primero</div>';
+    document.getElementById('payModalList').innerHTML='<div class="empty" style="padding:20px;text-align:center">Agrega suscripciones, servicios o tarjetas primero</div>';
     window._pmItems=[];return;
   }
-  var h='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Selecciona los pagos que realizaste hoy y se registrarán en Gastos.</div>';
+  var h='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Selecciona los pagos que realizaste hoy.</div>';
   all.forEach(function(item,idx){
     var d=daysUntil(item.nextDate);
-    var dTxt=!item.nextDate?'Sin fecha':d===0?'🔴 Hoy':d===1?'🟡 Mañana':d<0?'⚠️ Hace '+Math.abs(d)+' días':'📅 En '+d+' días';
+    var dTxt=item._dTxt||(!item.nextDate?'Sin fecha':d===0?'🔴 Hoy':d===1?'🟡 Mañana':d<0?'⚠️ Hace '+Math.abs(d)+' días':'📅 En '+d+' días');
     var amt=parseFloat(item.amount||item.monthly||0);
+    var dot=item._color?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+item._color+';margin-right:4px;vertical-align:middle"></span>':'';
     h+='<div class="pay-modal-item">';
     h+='<input type="checkbox" class="pm-check" data-idx="'+idx+'">';
     h+='<div style="flex:1;min-width:0">';
-    h+='<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(item.emoji||'📦')+' '+item.name+'</div>';
+    h+='<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+dot+(item.emoji||'📦')+' '+item.name+'</div>';
     h+='<div style="font-size:10px;color:var(--tx2);margin-top:1px">'+dTxt+'</div>';
     h+='</div>';
     h+='<input type="number" class="pm-amt" data-idx="'+idx+'" value="'+(amt>0?amt.toFixed(2):'0.00')+'" step="0.01" inputmode="decimal" style="width:90px">';
