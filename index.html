@@ -1313,8 +1313,13 @@ function empezarDeCero(){
 
 // ── Pay Modal ──
 function openPayModal(){
-  document.getElementById('payModal').classList.add('open');
-  renderPayModal();
+  var modal=document.getElementById('payModal');
+  if(!modal){alert('Error: modal no encontrado en el DOM');return}
+  modal.classList.add('open');
+  try{renderPayModal()}catch(e){
+    document.getElementById('payModalList').innerHTML='<div style="color:var(--rd);padding:12px">Error al cargar pagos: '+e.message+'</div>';
+    console.error('renderPayModal error:',e);
+  }
 }
 function closePayModal(){
   document.getElementById('payModal').classList.remove('open');
@@ -1325,7 +1330,7 @@ function renderPayModal(){
   var subs=Object.values(state.subs||{}).filter(function(i){return !i.paused});
   var svcs=Object.values(state.svcs||{}).filter(function(i){return !i.paused});
   var loans=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:l.monthly,emoji:'🏦'})});
-  var all=[...subs,...svcs,...loans,...cardItems];
+  var all=subs.concat(svcs).concat(loans).concat(cardItems);
   // Sort: upcoming first, then by date
   all.sort(function(a,b){
     var da=daysUntil(a.nextDate),db=daysUntil(b.nextDate);
