@@ -152,9 +152,6 @@ header h1{font-size:15px;font-weight:700;flex:1}
 .quick-form input::placeholder{color:var(--tx3)}
 .qbtn{border:none;padding:12px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;width:100%;min-height:46px}
 .qbtn.green{background:var(--gr);color:#fff} .qbtn.red{background:var(--rd);color:#fff}
-.pay-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:400;align-items:flex-end}
-.pay-modal.open{display:flex}
-.pay-modal-content{background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:90vh;overflow-y:auto;padding:20px;padding-bottom:max(20px,env(safe-area-inset-bottom));border-top:1px solid var(--bd)}
 .pay-modal-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:10px;margin-bottom:6px;border:1px solid var(--bd)}
 .pay-modal-item input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:var(--ac)}
 .pay-modal-item input[type=number]{width:100px;padding:5px 8px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;font-size:13px;color:var(--tx);text-align:right}
@@ -196,7 +193,7 @@ header h1{font-size:15px;font-weight:700;flex:1}
   <div id="patrimonioNeto"></div>
   <div class="summary-grid" id="summaryGrid"></div>
   <button class="pay-reg-btn" onclick="openPayModal()">💳 Registrar Pago</button>
-  <div id="warnBanner" class="warn-banner" style="display:none">⚠️ Pagos próximos en 7 días <button onclick="checkUpcoming(true)" style="margin-left:auto;background:var(--yw);color:#1a1a2e;border:none;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:700">Ver</button></div>
+  <div id="warnBanner" class="warn-banner" style="display:none">⚠️ Pagos próximos en 7 días <button onclick="document.getElementById('upcomingList').scrollIntoView({behavior:'smooth',block:'start'})" style="margin-left:auto;background:var(--yw);color:#1a1a2e;border:none;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:700">Ver</button></div>
   <div id="upcomingList"></div>
   <div class="section-title">📆 Pagos por día</div>
   <div class="day-timeline" id="dayTimeline"></div>
@@ -487,14 +484,14 @@ header h1{font-size:15px;font-weight:700;flex:1}
 </div>
 
 <!-- PAY MODAL -->
-<div class="pay-modal" id="payModal">
-  <div class="pay-modal-content">
+<div class="modal-bg" id="payModal" onclick="if(event.target===this)closePayModal()">
+  <div class="modal" style="max-width:560px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
       <h2 style="flex:1;font-size:15px;font-weight:700">💳 Registrar Pago</h2>
       <button onclick="closePayModal()" style="background:var(--bg3);border:none;color:var(--tx2);font-size:20px;cursor:pointer;padding:4px 10px;border-radius:8px">×</button>
     </div>
     <div id="payModalList"></div>
-    <button onclick="submitPayModal()" style="background:var(--ac);color:#fff;border:none;padding:14px;border-radius:12px;width:100%;font-size:14px;font-weight:700;margin-top:8px;min-height:48px">Registrar pagos seleccionados</button>
+    <button onclick="submitPayModal()" style="background:var(--ac);color:#fff;border:none;padding:14px;border-radius:12px;width:100%;font-size:14px;font-weight:700;margin-top:12px;min-height:48px;cursor:pointer">✓ Registrar pagos seleccionados</button>
   </div>
 </div>
 
@@ -1316,32 +1313,61 @@ function empezarDeCero(){
 
 // ── Pay Modal ──
 function openPayModal(){
-  document.getElementById('payModal').classList.add('open');renderPayModal();
+  document.getElementById('payModal').classList.add('open');
+  renderPayModal();
 }
-function closePayModal(){document.getElementById('payModal').classList.remove('open')}
+function closePayModal(){
+  document.getElementById('payModal').classList.remove('open');
+}
 function renderPayModal(){
-  var all=[...Object.values(state.subs||{}).filter(i=>!i.paused),...Object.values(state.svcs||{}).filter(i=>!i.paused),...Object.values(state.loans||{}).map(l=>Object.assign({},l,{amount:l.monthly})),...getCreditCardItems()];
-  var items=all.filter(i=>{var d=daysUntil(i.nextDate);return d>=-7&&d<=45}).sort((a,b)=>daysUntil(a.nextDate)-daysUntil(b.nextDate));
-  if(!items.length){document.getElementById('payModalList').innerHTML='<div class="empty">No hay pagos próximos</div>';return}
-  var h='';
-  items.forEach(function(item,idx){
-    var d=daysUntil(item.nextDate);var dTxt=d===0?'Hoy':d===1?'Mañana':d<0?'Hace '+Math.abs(d)+' días':'En '+d+' días';
-    h+='<div class="pay-modal-item"><input type="checkbox" class="pm-check" data-idx="'+idx+'"><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(item.emoji||'📦')+' '+item.name+'</div><div style="font-size:10px;color:var(--tx2)">'+dTxt+'</div></div>';
-    h+='<input type="number" class="pm-amt" data-idx="'+idx+'" value="'+(parseFloat(item.amount||item.monthly||0).toFixed(2))+'" step="0.01" inputmode="decimal"></div>';
+  // Show ALL recurring items — user chooses which to mark as paid today
+  var cardItems=getCreditCardItems();
+  var subs=Object.values(state.subs||{}).filter(function(i){return !i.paused});
+  var svcs=Object.values(state.svcs||{}).filter(function(i){return !i.paused});
+  var loans=Object.values(state.loans||{}).map(function(l){return Object.assign({},l,{amount:l.monthly,emoji:'🏦'})});
+  var all=[...subs,...svcs,...loans,...cardItems];
+  // Sort: upcoming first, then by date
+  all.sort(function(a,b){
+    var da=daysUntil(a.nextDate),db=daysUntil(b.nextDate);
+    return da-db;
   });
-  window._pmItems=items;
+  if(!all.length){
+    document.getElementById('payModalList').innerHTML='<div class="empty" style="padding:20px;text-align:center">Agrega suscripciones, servicios o préstamos primero</div>';
+    window._pmItems=[];return;
+  }
+  var h='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Selecciona los pagos que realizaste hoy y se registrarán en Gastos.</div>';
+  all.forEach(function(item,idx){
+    var d=daysUntil(item.nextDate);
+    var dTxt=!item.nextDate?'Sin fecha':d===0?'🔴 Hoy':d===1?'🟡 Mañana':d<0?'⚠️ Hace '+Math.abs(d)+' días':'📅 En '+d+' días';
+    var amt=parseFloat(item.amount||item.monthly||0);
+    h+='<div class="pay-modal-item">';
+    h+='<input type="checkbox" class="pm-check" data-idx="'+idx+'">';
+    h+='<div style="flex:1;min-width:0">';
+    h+='<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(item.emoji||'📦')+' '+item.name+'</div>';
+    h+='<div style="font-size:10px;color:var(--tx2);margin-top:1px">'+dTxt+'</div>';
+    h+='</div>';
+    h+='<input type="number" class="pm-amt" data-idx="'+idx+'" value="'+(amt>0?amt.toFixed(2):'0.00')+'" step="0.01" inputmode="decimal" style="width:90px">';
+    h+='</div>';
+  });
+  window._pmItems=all;
   document.getElementById('payModalList').innerHTML=h;
 }
 function submitPayModal(){
-  var checks=document.querySelectorAll('.pm-check:checked');
-  if(!checks.length){alert('Selecciona al menos un pago');return}
+  if(!window._pmItems||!window._pmItems.length){alert('No hay ítems cargados.');return}
+  var checks=document.querySelectorAll('#payModal .pm-check:checked');
+  if(!checks.length){alert('Selecciona al menos un pago marcando la casilla ✓');return}
+  var count=0;
   checks.forEach(function(cb){
-    var idx=parseInt(cb.dataset.idx);var item=window._pmItems[idx];if(!item)return;
-    var amt=parseFloat(document.querySelector('.pm-amt[data-idx="'+idx+'"]').value)||0;
+    var idx=parseInt(cb.dataset.idx);
+    var item=window._pmItems[idx];if(!item)return;
+    var amtEl=document.querySelector('#payModal .pm-amt[data-idx="'+idx+'"]');
+    var amt=amtEl?parseFloat(amtEl.value)||0:0;
     if(!state.gastos)state.gastos={};
-    state.gastos[uid()]={amount:amt,cat:'💳 Pago recurrente',desc:item.name,date:todayISO(),cardId:item.cardId};
+    state.gastos[uid()]={amount:amt,cat:'💳 Pago recurrente',desc:(item.emoji||'')+(item.name||''),date:todayISO(),cardId:item.cardId||''};
+    count++;
   });
-  save();closePayModal();renderDashboard();renderGastos();renderHistorial();alert('✅ Pagos registrados');
+  save();closePayModal();renderDashboard();renderGastos();renderHistorial();
+  alert('✅ '+count+' pago'+(count!==1?'s':'')+' registrado'+(count!==1?'s':'')+' en Gastos.');
 }
 
 // ── Init ──
