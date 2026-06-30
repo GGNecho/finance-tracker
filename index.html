@@ -538,7 +538,7 @@ function todayISO(){return new Date().toISOString().split('T')[0]}
 function fmtMoney(n,cur){return(cur||'MXN')+' $'+parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function fmtAmt(n){return'$'+parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function toMonthly(a,c){var v=parseFloat(a)||0;if(c==='annual')return v/12;if(c==='weekly')return v*4.33;if(c==='bimestral')return v/2;return v}
-function daysUntil(d){if(!d)return 999;var dt=new Date(d+'T12:00:00'),now=new Date();now.setHours(0,0,0,0);return Math.round((dt-now)/86400000)}
+function daysUntil(d){if(!d)return 999;var dt=new Date(d+'T00:00:00'),now=new Date();now.setHours(0,0,0,0);return Math.floor((dt-now)/86400000)}
 function fmtDate(d){if(!d)return'';return new Date(d+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'short'})}
 function thisMonthStr(){var n=new Date();return n.getFullYear()+'-'+(n.getMonth()+1)}
 function thisMonthLabel(){var n=new Date();var M=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];return M[n.getMonth()]+' '+n.getFullYear()}
