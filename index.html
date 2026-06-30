@@ -174,6 +174,7 @@ header h1{font-size:15px;font-weight:700;flex:1}
 <header>
   <h1>💳 Finance Tracker</h1>
   <button class="hbtn" id="notifBtn" onclick="requestNotifPerm()">🔔</button>
+  <button class="hbtn" id="saveBtn" onclick="manualSave()" style="display:none">💾 Guardar</button>
   <button class="hbtn" id="fbBtn">☁️ Sync</button>
 </header>
 <div class="nav">
@@ -570,8 +571,10 @@ function closeMoreSheet(){document.getElementById('moreOverlay').classList.remov
 
 // ── Persist ──
 function save(){
+  state._ts=Date.now();
   try{localStorage.setItem('finance_state',JSON.stringify(state))}catch(e){}
-  if(typeof _fbSave==='function')_fbSave();
+  // Firebase save is manual — user clicks 💾 button
+  _markUnsaved();
 }
 function load(){
   try{var d=localStorage.getItem('finance_state');if(d){var p=JSON.parse(d);if(p){state=Object.assign({cards:{},subs:{},svcs:{},loans:{},msi:{},paid:{},cash:0,ingresos:{},gastos:{},periodos:[]},p)}}}catch(e){}
@@ -1364,34 +1367,84 @@ if(!firebase.apps.length)firebase.initializeApp(_fbCfg);
 const _auth=firebase.auth();
 const _db=firebase.database();
 let _uid=null;
+let _fbMyWrite=false;
 function _ref(){return _db.ref('users/'+_uid+'/finance')}
-function _fbSave(){if(_uid)_ref().set(state)}
+
+// ── Manual save button ──
+function _markUnsaved(){
+  var btn=document.getElementById('saveBtn');if(!btn)return;
+  btn.textContent='💾 Guardar';
+  btn.style.cssText='font-size:11px;padding:6px 12px;border-radius:8px;border:1px solid var(--or);cursor:pointer;background:var(--bg3);color:var(--or)';
+}
+function manualSave(){
+  if(!_uid){alert('Inicia sesión con Google (☁️ Sync) para guardar en la nube.');return}
+  var btn=document.getElementById('saveBtn');
+  btn.textContent='⏳ Guardando...';
+  btn.style.cssText='font-size:11px;padding:6px 12px;border-radius:8px;border:1px solid var(--yw);cursor:default;background:var(--bg3);color:var(--yw)';
+  _fbMyWrite=true;
+  _ref().set(state)
+    .then(function(){
+      btn.textContent='✓ Guardado';
+      btn.style.cssText='font-size:11px;padding:6px 12px;border-radius:8px;border:1px solid var(--gr);cursor:pointer;background:var(--bg3);color:var(--gr)';
+      setTimeout(function(){_fbMyWrite=false},300);
+    })
+    .catch(function(e){
+      btn.textContent='✗ Error';
+      btn.style.cssText='font-size:11px;padding:6px 12px;border-radius:8px;border:1px solid var(--rd);cursor:pointer;background:var(--bg3);color:var(--rd)';
+      _fbMyWrite=false;
+      console.error('Firebase save:',e);
+    });
+}
+
+function _applyRemote(d){
+  // Only apply remote if it's newer than current local state
+  if(d._ts && state._ts && state._ts > d._ts){
+    // Local is newer — push it up to Firebase
+    _fbMyWrite=true;
+    _ref().set(state).then(function(){setTimeout(function(){_fbMyWrite=false},300)}).catch(function(){_fbMyWrite=false});
+    return;
+  }
+  state=Object.assign({cards:{},subs:{},svcs:{},loans:{},msi:{},paid:{},cash:0,ingresos:{},gastos:{},periodos:[]},d);
+  try{localStorage.setItem('finance_state',JSON.stringify(state))}catch(e){}
+  renderAll();
+}
+
 function _updateBtn(){
   var btn=document.getElementById('fbBtn');if(!btn)return;
   var user=_auth.currentUser;
+  var saveBtn=document.getElementById('saveBtn');
   if(user){
     btn.textContent='☁️ '+user.displayName.split(' ')[0];
     btn.style.cssText='font-size:11px;padding:6px 12px;border-radius:8px;border:1px solid var(--gr);cursor:pointer;background:var(--bg3);color:var(--gr)';
-    btn.onclick=function(){_auth.signOut()};
+    btn.onclick=function(){if(confirm('¿Cerrar sesión?'))_auth.signOut()};
+    if(saveBtn)saveBtn.style.display='inline-block';
   } else {
     btn.textContent='☁️ Sync';
     btn.style.cssText='font-size:11px;padding:6px 12px;border-radius:8px;border:1px solid var(--bd2);cursor:pointer;background:var(--bg3);color:var(--tx2)';
     btn.onclick=function(){_auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(e){alert('Error: '+e.message)})};
+    if(saveBtn)saveBtn.style.display='none';
   }
 }
+
 _auth.onAuthStateChanged(function(user){
   _updateBtn();
   if(!user){_uid=null;return}
   _uid=user.uid;
-  _ref().once('value').then(function(snap){
+  // Load from Firebase once on sign-in; real-time listener for changes from other devices
+  _ref().on('value',function(snap){
+    if(_fbMyWrite)return;
     var d=snap.val();
-    if(d){
-      state=Object.assign({cards:{},subs:{},svcs:{},loans:{},msi:{},paid:{},cash:0,ingresos:{},gastos:{},periodos:[]},d);
-      try{localStorage.setItem('finance_state',JSON.stringify(state))}catch(e){}
-    }
-    renderAll();
+    if(d)_applyRemote(d);
+    else renderAll();
     setTimeout(()=>checkUpcoming(Notification.permission==='granted'),500);
-  });
+  },function(err){console.error('Firebase:',err.message);renderAll()});
+});
+
+// Re-sync when tab becomes visible again (switching between devices)
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'&&_uid){
+    _ref().once('value').then(function(snap){var d=snap.val();if(d&&!_fbMyWrite)_applyRemote(d)});
+  }
 });
 </script>
 </body>
