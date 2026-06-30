@@ -601,11 +601,22 @@ function renderDashboard(){
     sumCard('Crédito usado',fmtAmt(totBal),'de '+fmtAmt(totLimit))+
     sumCard('Efectivo','$'+parseFloat(state.cash||0).toLocaleString('es-MX',{minimumFractionDigits:2}),'<span onclick="editCash()" style="color:var(--ac);cursor:pointer">✏️ editar</span>');
   // Upcoming
-  var upcoming=[...allItems,...loans.map(l=>Object.assign({},l,{amount:l.monthly})),...getCreditCardItems()].filter(i=>daysUntil(i.nextDate)<=7).sort((a,b)=>daysUntil(a.nextDate)-daysUntil(b.nextDate));
+  var upcoming=[...allItems,...loans.map(l=>Object.assign({},l,{amount:l.monthly})),...getCreditCardItems()]
+    .filter(function(i){return daysUntil(i.nextDate)<=7})
+    .sort(function(a,b){return daysUntil(a.nextDate)-daysUntil(b.nextDate)});
+  var unpaidUpcoming=upcoming.filter(function(i){return !_isPaidThisCycle(i.name)});
   if(upcoming.length){
-    document.getElementById('warnBanner').style.display='flex';
+    document.getElementById('warnBanner').style.display=unpaidUpcoming.length?'flex':'none';
     var h='<div class="section-title">⚠️ Pagos próximos</div>';
-    upcoming.forEach(i=>{var d=daysUntil(i.nextDate),card=state.cards[i.cardId];h+='<div class="notif-item"><div class="ni-title">'+(i.emoji||'📦')+' '+i.name+'</div><div class="ni-sub">'+fmtAmt(i.amount||i.monthly)+' · '+(d===0?'Hoy':d===1?'Mañana':'En '+d+' días')+(card?' · '+card.name:'')+'</div></div>';});
+    upcoming.forEach(function(i){
+      var d=daysUntil(i.nextDate),card=(state.cards||{})[i.cardId];
+      var pi=_paidInfo(i.name);
+      var paid=pi.paid;
+      h+='<div class="notif-item" style="'+(paid?'opacity:.6;':'')+'">'+
+        '<div class="ni-title" style="'+(paid?'text-decoration:line-through;':'')+'">'+(i.emoji||'📦')+' '+i.name+(paid?' ✓':'')+'</div>';
+      h+='<div class="ni-sub">'+fmtAmt(i.amount||i.monthly)+' · '+(d===0?'Hoy':d===1?'Mañana':'En '+d+' días')+
+        (paid?' · <span style="color:'+pi.cardColor+'">✓ '+pi.cardName+'</span>':card?' · '+card.name:'')+'</div></div>';
+    });
     document.getElementById('upcomingList').innerHTML=h;
   } else {
     document.getElementById('warnBanner').style.display='none';
@@ -648,9 +659,10 @@ function renderPatrimonioNeto(){
 function initCal(){var n=new Date();calYear=n.getFullYear();calMonth=n.getMonth()}
 function changeMonth(d){calMonth+=d;if(calMonth>11){calMonth=0;calYear++}if(calMonth<0){calMonth=11;calYear--}renderCalendar()}
 
-// ── Shared helper: gastos this month indexed by cardId and by itemName ──
-function _gastosThisMonth(){
-  var now=new Date(),ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+// ── Shared helpers ──
+function _ymStr(y,m){return y+'-'+String(m+1).padStart(2,'0')}
+function _gastosInMonth(y,m){
+  var ym=_ymStr(y,m);
   var list=Object.values(state.gastos||{}).filter(function(g){return g.date&&g.date.startsWith(ym)});
   var byCard={};
   list.forEach(function(g){
@@ -660,12 +672,31 @@ function _gastosThisMonth(){
   });
   return{list:list,byCard:byCard};
 }
-function _isPaidThisCycle(itemName){
-  var now=new Date(),ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+function _gastosThisMonth(){
+  var now=new Date();return _gastosInMonth(now.getFullYear(),now.getMonth());
+}
+// paid = gasto registered in given month whose desc contains itemName
+function _isPaidInMonth(itemName,y,m){
+  var ym=_ymStr(y,m);
   return Object.values(state.gastos||{}).some(function(g){
     return g.date&&g.date.startsWith(ym)&&g.desc&&g.desc.indexOf(itemName)>=0;
   });
 }
+function _isPaidThisCycle(itemName){
+  var now=new Date();return _isPaidInMonth(itemName,now.getFullYear(),now.getMonth());
+}
+// returns {paid:bool, cardName:string} for a recurring item in current month
+function _paidInfo(itemName){
+  var now=new Date(),ym=_ymStr(now.getFullYear(),now.getMonth());
+  var g=Object.values(state.gastos||{}).find(function(g){
+    return g.date&&g.date.startsWith(ym)&&g.desc&&g.desc.indexOf(itemName)>=0;
+  });
+  if(!g)return{paid:false,cardName:''};
+  var card=g.cardId&&(state.cards||{})[g.cardId];
+  return{paid:true,cardName:card?card.name:'Efectivo',cardColor:card?card.color:'var(--gr)'};
+}
+// is gasto a payment TO the bank (reduces card debt)?
+function _isCardPayment(g){return g.cat&&g.cat.indexOf('Pago tarjeta')>=0}
 
 // ── By Card (Cargos reales este mes + recurrentes asignados) ──
 function renderByCard(){
@@ -679,8 +710,8 @@ function renderByCard(){
     // Recurrentes asignados
     var items=Object.values(state.subs||{}).concat(Object.values(state.svcs||{})).filter(function(i){return i.cardId===cid&&!i.paused});
     var recurTotal=items.reduce(function(a,i){return a+toMonthly(i.amount,i.cycle)},0);
-    // Gastos reales registrados este mes contra esta tarjeta
-    var charges=gm.byCard[cid]||[];
+    // Cargos reales: gastos hechos CON la tarjeta (excluye pagos a la tarjeta)
+    var charges=(gm.byCard[cid]||[]).filter(function(g){return !_isCardPayment(g)});
     var chargeTotal=charges.reduce(function(a,g){return a+parseFloat(g.amount||0)},0);
     var limit=parseFloat(card.limit||0);
     var avail=limit>0?limit-parseFloat(card.balance||0):null;
@@ -691,9 +722,20 @@ function renderByCard(){
     h+='<div style="font-size:13px;font-weight:700;flex:1">'+card.name+'</div>';
     if(avail!==null)h+='<div style="font-size:10px;color:var(--tx2)">Disp: '+fmtAmt(avail)+'</div>';
     h+='</div>';
-    // Cargos registrados este mes
+    // ── Pagos a favor (payments TO bank) ──
+    var payments=(gm.byCard[cid]||[]).filter(_isCardPayment);
+    var payTotal=payments.reduce(function(a,g){return a+parseFloat(g.amount||0)},0);
+    if(payments.length){
+      h+='<div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px">Pagos a favor</div>';
+      payments.forEach(function(g){
+        h+='<div class="by-card-row"><span>💚 '+(g.desc||'Pago')+'<span style="font-size:9px;color:var(--tx3);margin-left:4px">'+g.date+'</span></span>';
+        h+='<span style="color:var(--gr)">+'+fmtAmt(g.amount)+'</span></div>';
+      });
+      h+='<div class="by-card-row" style="font-weight:700;border-top:1px solid var(--bd);margin-top:4px;padding-top:4px"><span>Total pagado</span><span style="color:var(--gr)">+'+fmtAmt(payTotal)+'</span></div>';
+    }
+    // ── Cargos registrados este mes ──
     if(charges.length){
-      h+='<div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px">Cargos este mes</div>';
+      h+='<div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 4px">Cargos con esta tarjeta</div>';
       charges.forEach(function(g){
         h+='<div class="by-card-row" style="color:var(--tx)">';
         h+='<span>'+(g.cat||'📦')+' '+(g.desc||'Sin descripción')+'<span style="font-size:9px;color:var(--tx3);margin-left:4px">'+g.date+'</span></span>';
@@ -702,8 +744,9 @@ function renderByCard(){
       });
       h+='<div class="by-card-row" style="font-weight:700;border-top:1px solid var(--bd);margin-top:4px;padding-top:4px">';
       h+='<span>Total cargado</span><span style="color:var(--rd)">-'+fmtAmt(chargeTotal)+'</span></div>';
-    } else {
-      h+='<div style="font-size:11px;color:var(--tx3);padding:4px 0">Sin cargos registrados este mes</div>';
+    }
+    if(!payments.length&&!charges.length){
+      h+='<div style="font-size:11px;color:var(--tx3);padding:4px 0">Sin movimientos registrados este mes</div>';
     }
     // Recurrentes asignados
     if(items.length){
@@ -722,44 +765,60 @@ function renderByCard(){
   el.innerHTML=h;
 }
 
-// ── Day Timeline (con estado pagado) ──
+// ── Day Timeline (2 meses, con estado pagado) ──
 function renderDayTimeline(){
+  var now=new Date(),curY=now.getFullYear(),curM=now.getMonth();
+  var MNames=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   var loans=Object.values(state.loans||{});
   var allItems=Object.values(state.subs||{}).filter(function(i){return !i.paused})
     .concat(Object.values(state.svcs||{}).filter(function(i){return !i.paused}))
     .concat(loans)
     .concat(getCreditCardItems());
-  var byDay={};
-  allItems.forEach(function(item){
-    if(!item.nextDate)return;
-    var day=parseInt(item.nextDate.split('-')[2]);
-    if(!byDay[day])byDay[day]={items:[],total:0,paid:0};
-    var amt=parseFloat(item.monthly||item.amount||0);
-    var paid=_isPaidThisCycle(item.name);
-    byDay[day].items.push({item:item,paid:paid,amt:amt});
-    byDay[day].total+=amt;
-    if(paid)byDay[day].paid+=amt;
-  });
-  var daysArr=Object.keys(byDay).map(Number).sort(function(a,b){return a-b});
-  if(!daysArr.length){document.getElementById('dayTimeline').innerHTML='<div class="empty">Agrega pagos recurrentes</div>';return}
-  var today=new Date().getDate();
-  var h='';
-  daysArr.forEach(function(day){
-    var data=byDay[day];
-    var isPast=day<today,isToday=day===today;
-    var allPaid=data.paid>=data.total&&data.total>0;
-    var border=isToday?'border-left:3px solid var(--ac)':allPaid?'border-left:3px solid var(--gr)':'';
-    h+='<div class="day-row" style="'+(isPast&&!allPaid?'opacity:.55':'')+border+'">';
-    h+='<div class="day-num" style="color:'+(isToday?'var(--ac)':allPaid?'var(--gr)':isPast?'var(--tx3)':'var(--tx)')+'">'+day+(allPaid?' ✓':'')+'</div>';
-    h+='<div class="day-items">';
-    data.items.forEach(function(r,i){
-      if(i)h+=' · ';
-      h+='<span style="'+(r.paid?'text-decoration:line-through;color:var(--tx3)':'')+'">'+( r.item.emoji||'📦')+' '+r.item.name+'</span>';
+  // Build 2-month structure
+  var months=[];
+  for(var mi=0;mi<2;mi++){
+    var y=curY,m=curM+mi;
+    if(m>11){m-=12;y++;}
+    var ym=_ymStr(y,m);
+    var byDay={};
+    allItems.forEach(function(item){
+      if(!item.nextDate||!item.nextDate.startsWith(ym))return;
+      var day=parseInt(item.nextDate.split('-')[2]);
+      if(!byDay[day])byDay[day]={items:[],total:0,paid:0};
+      var amt=parseFloat(item.monthly||item.amount||0);
+      var paid=_isPaidInMonth(item.name,y,m);
+      byDay[day].items.push({item:item,paid:paid,amt:amt});
+      byDay[day].total+=amt;
+      if(paid)byDay[day].paid+=amt;
     });
-    h+='</div>';
-    h+='<div class="day-total" style="color:'+(allPaid?'var(--gr)':'var(--tx)')+'">'+fmtAmt(data.total)+'</div></div>';
+    months.push({y:y,m:m,label:MNames[m]+' '+y,byDay:byDay});
+  }
+  var el=document.getElementById('dayTimeline');
+  var hasAny=months.some(function(mo){return Object.keys(mo.byDay).length>0});
+  if(!hasAny){el.innerHTML='<div class="empty">Sin pagos en los próximos 2 meses</div>';return}
+  var today=now.getDate();
+  var h='';
+  months.forEach(function(mo,mi){
+    var daysArr=Object.keys(mo.byDay).map(Number).sort(function(a,b){return a-b});
+    if(!daysArr.length)return;
+    h+='<div style="font-size:10px;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.5px;margin:'+( mi?'14px':'0')+' 0 8px">'+mo.label+'</div>';
+    daysArr.forEach(function(day){
+      var data=mo.byDay[day];
+      var isCurMo=(mi===0),isPast=isCurMo&&day<today,isToday=isCurMo&&day===today;
+      var allPaid=data.paid>=data.total&&data.total>0;
+      var border=isToday?'border-left:3px solid var(--ac)':allPaid?'border-left:3px solid var(--gr)':'';
+      h+='<div class="day-row" style="'+(isPast&&!allPaid?'opacity:.55':'')+border+'">';
+      h+='<div class="day-num" style="color:'+(isToday?'var(--ac)':allPaid?'var(--gr)':isPast?'var(--tx3)':'var(--tx)')+'">'+day+(allPaid?' ✓':'')+'</div>';
+      h+='<div class="day-items">';
+      data.items.forEach(function(r,i){
+        if(i)h+=' · ';
+        h+='<span style="'+(r.paid?'text-decoration:line-through;color:var(--tx3)':'')+'">'+( r.item.emoji||'📦')+' '+r.item.name+'</span>';
+      });
+      h+='</div>';
+      h+='<div class="day-total" style="color:'+(allPaid?'var(--gr)':'var(--tx)')+'">'+fmtAmt(data.total)+'</div></div>';
+    });
   });
-  document.getElementById('dayTimeline').innerHTML=h;
+  el.innerHTML=h;
 }
 
 // ── Card Health ──
@@ -781,6 +840,10 @@ function renderCardHealth(){
     if(dCorte!==null&&dCorte<=5){recs.push('✂️ Corte en '+dCorte+' días');if(rCls==='rec-ok')rCls='rec-warn'}
     if(dPago!==null&&dPago<=5){recs.push('💳 Pago en '+dPago+' días');if(rCls!=='rec-danger')rCls='rec-warn'}
     if(dPago!==null&&dPago<=0){recs.push('🚨 Pago vencido');rCls='rec-danger'}
+    // Pagado este mes (payment TO the bank)
+    var gm=_gastosThisMonth();
+    var pagado=(gm.byCard[id]||[]).filter(_isCardPayment).reduce(function(a,g){return a+parseFloat(g.amount||0)},0);
+    if(pagado>0)recs.push('✅ Pagado este mes: '+fmtAmt(pagado));
     h+='<div class="health-card"><div class="health-header"><div class="card-color" style="background:'+c.color+'"></div><div style="font-size:13px;font-weight:700">'+c.name+'</div></div>';
     h+='<div class="health-grid">';
     h+='<div class="health-cell"><div class="hc-val">'+fmtAmt(avail).replace('$','')+'</div><div class="hc-label">Disponible</div></div>';
@@ -820,11 +883,11 @@ function renderSmartRecs(){
   all.forEach(function(item){
     var d=daysUntil(item.nextDate),amt=parseFloat(item.amount||item.monthly||0);
     var dText=d===0?'Hoy':d===1?'Mañana':'En '+d+' días';
-    var alreadyPaid=_isPaidThisCycle(item.name);
+    var pi=_paidInfo(item.name);
     var sug,sugStyle;
     var isCardPay=cardPays.indexOf(item)>=0;
-    if(alreadyPaid){
-      sug='✓ Pagado';sugStyle='background:var(--gr)22;color:var(--gr);border:1px solid var(--gr)44';
+    if(pi.paid){
+      sug='✓ '+pi.cardName;sugStyle='background:'+pi.cardColor+'22;color:'+pi.cardColor+';border:1px solid '+pi.cardColor+'44';
     } else if(isCardPay){
       sug='🏦 Transferencia';sugStyle='background:var(--bg3);color:var(--tx2)';
     } else {
@@ -834,7 +897,7 @@ function renderSmartRecs(){
         sug='💳 '+best.card.name;sugStyle='background:'+best.card.color+'22;color:'+best.card.color+';border:1px solid '+best.card.color+'44';
       } else {sug='💵 Efectivo';sugStyle='background:var(--bg3);color:var(--yw)'}
     }
-    h+='<div style="background:var(--bg2);border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--bd);display:flex;align-items:center;gap:8px;'+(alreadyPaid?'opacity:.7':'')+'">'+
+    h+='<div style="background:var(--bg2);border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--bd);display:flex;align-items:center;gap:8px;'+(pi.paid?'opacity:.7':'')+'">'+
       '<div style="font-size:18px">'+(item.emoji||'📦')+'</div>'+
       '<div style="flex:1;min-width:0">'+
         '<div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+item.name+'</div>'+
@@ -859,8 +922,8 @@ function renderPaymentSummary(){
   cards.forEach(function(entry){
     var id=entry[0],c=entry[1];
     var ni=parseFloat(c.noInterest||0),mm=parseFloat(c.minMsi||0),mn=parseFloat(c.minimum||0);
-    // Sum gastos registered against this card this month with cat 💳
-    var paid=(gm.byCard[id]||[]).filter(function(g){return g.cat&&g.cat.indexOf('💳')>=0})
+    // Only count payments TO the bank (not charges made with the card)
+    var paid=(gm.byCard[id]||[]).filter(_isCardPayment)
       .reduce(function(a,g){return a+parseFloat(g.amount||0)},0);
     totNI+=ni;totMM+=mm;totMn+=mn;totPd+=paid;
     var fmt=function(n,cls){return n?'<span class="'+cls+'">'+fmtAmt(n)+'</span>':'<span class="pay-nil">—</span>'};
@@ -895,18 +958,17 @@ function renderCalendar(){
     if(d.getFullYear()===calYear&&d.getMonth()===calMonth){
       var day=d.getDate();if(!events[day])events[day]=[];
       var card=(state.cards||{})[item.cardId];
-      var paid=_isPaidThisCycle(item.name);
+      var paid=_isPaidInMonth(item.name,calYear,calMonth);
       events[day].push({name:(item.emoji||'📦')+' '+item.name,color:card?card.color:'#888',paid:paid,type:'recurring'});
     }
   });
   // Credit card due days
+  var gmCal=_gastosInMonth(calYear,calMonth);
   Object.entries(state.cards||{}).forEach(function(entry){
     var cId=entry[0],c=entry[1];if(c.type!=='credit'||!c.dueDay)return;
     var day=parseInt(c.dueDay);if(day<1||day>daysInMonth)return;
     if(!events[day])events[day]=[];
-    // Check if card payment was registered
-    var gm=_gastosThisMonth();
-    var paid=(gm.byCard[cId]||[]).some(function(g){return g.cat&&g.cat.indexOf('💳')>=0});
+    var paid=(gmCal.byCard[cId]||[]).some(_isCardPayment);
     events[day].push({name:'💳 '+c.name,color:c.color,paid:paid,type:'card'});
   });
   for(var i=0;i<startDay;i++)h+='<div class="cal-day other-month"><div class="cal-day-num">'+(prevDays-startDay+i+1)+'</div></div>';
@@ -1531,6 +1593,11 @@ function _paySubmitCard(){
     var amt=amtEl?parseFloat(amtEl.value)||0:0;
     if(!state.gastos)state.gastos={};
     state.gastos[uid()]={amount:amt,cat:'💳 Pago tarjeta',desc:item.name,date:todayISO(),cardId:item.cardId};
+    // Reduce card balance (payment to bank reduces debt)
+    if(item.cardId&&state.cards&&state.cards[item.cardId]){
+      var cur=parseFloat(state.cards[item.cardId].balance||0);
+      state.cards[item.cardId].balance=Math.max(0,cur-amt);
+    }
   });
   save();renderAll();_payNav('main');
   alert('✅ Pago registrado en Gastos');
